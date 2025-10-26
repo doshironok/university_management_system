@@ -615,52 +615,63 @@ class DekanatPanel(BasePanel):
         dialog.exec()
 
     def generate_classroom_occupancy(self):
-        """Генерация отчета по занятости аудиторий"""
+        """Генерация отчета по занятости аудиторий - упрощенная версия"""
         try:
-            print("=" * 50)
-            print("🔄 ЗАПУСК ГЕНЕРАЦИИ ОТЧЕТА ПО АУДИТОРИЯМ")
-            print("=" * 50)
+            print("🔄 ЗАПУСК ГЕНЕРАЦИИ ОТЧЕТА")
 
-            # Проверяем доступность модулей
-            try:
-                from services.report_service import DocumentGenerator
-                print("✅ DocumentGenerator импортирован")
-            except ImportError as e:
-                print(f"❌ Ошибка импорта DocumentGenerator: {e}")
-                raise
+            # Создаем и сохраняем прогресс-диалог
+            self._progress = QProgressDialog(
+                "Генерация отчета по занятости аудиторий...",
+                "Отмена", 0, 0, self
+            )
+            self._progress.setWindowTitle("Пожалуйста, подождите")
+            self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+            self._progress.setFixedSize(400, 120)
+            self._progress.show()
 
-            try:
-                from widgets.report_dialogs import ReportGenerationThread
-                print("✅ ReportGenerationThread импортирован")
-            except ImportError as e:
-                print(f"❌ Ошибка импорта ReportGenerationThread: {e}")
-                raise
-
-            print("🔍 Создаем прогресс-диалог...")
-            progress = QProgressDialog("Генерация отчета по занятости аудиторий...", "Отмена", 0, 0, self)
-            progress.setWindowTitle("Пожалуйста, подождите")
-            progress.setWindowModality(Qt.WindowModality.WindowModal)
-            progress.show()
-            print("✅ Прогресс-диалог создан")
-
-            print("🔍 Создаем поток для генерации отчета...")
-            thread = ReportGenerationThread('classroom_occupancy')
-            print("✅ Поток создан")
-
-            # Подключаем сигналы
-            thread.finished.connect(
-                lambda path: self.on_report_generated(path, progress, "Отчет по занятости аудиторий"))
-            thread.error.connect(lambda error: self.on_report_error(error, progress))
-
-            print("🚀 Запускаем поток...")
-            thread.start()
-            print("✅ Поток запущен")
+            # Запускаем в основном потоке с небольшой задержкой
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(50, self._generate_directly)
 
         except Exception as e:
-            print(f"💥 КРИТИЧЕСКАЯ ОШИБКА В generate_classroom_occupancy: {e}")
+            print(f"💥 Ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось запустить генерацию: {str(e)}")
+
+    def _generate_directly(self):
+        """Прямая генерация в основном потоке"""
+        try:
+            from services.report_service import DocumentGenerator
+
+            print("🎯 Начинаем генерацию отчета...")
+            file_path = DocumentGenerator.generate_classroom_occupancy_report()
+
+            # Закрываем прогресс-диалог
+            if hasattr(self, '_progress'):
+                self._progress.close()
+                del self._progress
+
+            if file_path:
+                print(f"✅ Отчет создан: {file_path}")
+                reply = QMessageBox.question(
+                    self,
+                    "✅ Отчет сгенерирован",
+                    "Отчет по занятости аудиторий успешно сгенерирован. Хотите открыть файл?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.open_file(file_path)
+            else:
+                QMessageBox.critical(self, "❌ Ошибка", "Не удалось сгенерировать отчет")
+
+        except Exception as e:
+            if hasattr(self, '_progress'):
+                self._progress.close()
+                del self._progress
+
+            print(f"💥 Ошибка при генерации: {e}")
             import traceback
             traceback.print_exc()
-            QMessageBox.critical(self, "Ошибка", f"Не удалось запустить генерацию отчета: {str(e)}")
+            QMessageBox.critical(self, "❌ Ошибка", f"Не удалось сгенерировать отчет:\n{str(e)}")
 
     def on_report_generated(self, file_path, progress, report_name):
         """Обработка успешной генерации отчета"""
