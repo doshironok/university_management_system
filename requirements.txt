@@ -1,0 +1,6 @@
+PyQt6==6.10.0
+psycopg2-binary==2.9.11
+bcrypt==5.0.0
+python-dotenv==1.0.0
+docxtpl==0.20.1
+reportlab==4.0.4
