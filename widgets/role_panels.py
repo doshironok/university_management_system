@@ -98,6 +98,9 @@ class AdminPanel(BasePanel):
 
         self.layout.addWidget(tabs)
 
+        # Загружаем данные при инициализации
+        self.load_initial_data()
+
     def create_users_tab(self):
         """Вкладка управления пользователями"""
         widget = QWidget()
@@ -131,6 +134,7 @@ class AdminPanel(BasePanel):
         return widget
 
     def create_departments_tab(self):
+        """Вкладка управления кафедрами"""
         widget = QWidget()
         layout = QVBoxLayout()
 
@@ -153,8 +157,9 @@ class AdminPanel(BasePanel):
 
         # Таблица кафедр
         self.departments_table = self.create_table([
-            "ID", "Название", "Сокращение"  # Убрали "Дата создания"
+            "ID", "Название", "Сокращение", "Действия"
         ])
+        self.departments_table.cellDoubleClicked.connect(self.on_department_action)
         layout.addWidget(self.departments_table)
 
         widget.setLayout(layout)
@@ -351,40 +356,307 @@ class AdminPanel(BasePanel):
             print(f"❌ Ошибка при добавлении пользователя: {e}")
             QMessageBox.critical(dialog, "Ошибка", f"Ошибка при добавлении пользователя:\n{str(e)}")
 
-
     def on_user_action(self, row, column):
         """Обработка действий с пользователем"""
         if column == 6:  # Колонка "Действия"
             user_id = self.users_table.item(row, 0).text()
             user_login = self.users_table.item(row, 1).text()
+            user_role = self.users_table.item(row, 2).text()
+
+            # Диалог выбора действия
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"Действия с пользователем: {user_login}")
+            dialog.setFixedSize(350, 300)
+
+            layout = QVBoxLayout()
+
+            info_label = QLabel(f"Пользователь: {user_login}\nID: {user_id}\nРоль: {user_role}")
+            info_label.setStyleSheet("font-weight: bold; margin-bottom: 20px;")
+            layout.addWidget(info_label)
+
+            edit_login_btn = QPushButton("✏️ Изменить логин")
+            edit_password_btn = QPushButton("✏️ Изменить пароль")
+            edit_role_btn = QPushButton("✏️ Изменить роль")
+            toggle_status_btn = QPushButton("🔄 Изменить статус")
+            delete_btn = QPushButton("🗑️ Удалить пользователя")
+            cancel_btn = QPushButton("Отмена")
+
+            edit_login_btn.clicked.connect(lambda: self.edit_user_login(user_id, user_login, dialog))
+            edit_password_btn.clicked.connect(lambda: self.edit_user_password(user_id, user_login, dialog))
+            edit_role_btn.clicked.connect(lambda: self.edit_user_role(user_id, user_login, user_role, dialog))
+            toggle_status_btn.clicked.connect(lambda: self.toggle_user_status(user_id, user_login, dialog))
+            delete_btn.clicked.connect(lambda: self.delete_user(user_id, user_login, dialog))
+            cancel_btn.clicked.connect(dialog.reject)
+
+            layout.addWidget(edit_login_btn)
+            layout.addWidget(edit_password_btn)
+            layout.addWidget(edit_role_btn)
+            layout.addWidget(toggle_status_btn)
+            layout.addWidget(delete_btn)
+            layout.addWidget(cancel_btn)
+
+            dialog.setLayout(layout)
+            dialog.exec()
+
+    def edit_user_login(self, user_id, current_login, parent_dialog):
+        """Изменение логина пользователя"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Изменение логина пользователя")
+        dialog.setFixedSize(400, 150)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+        login_input = QLineEdit()
+        login_input.setText(current_login)
+        login_input.selectAll()
+
+        form_layout.addRow("Новый логин:", login_input)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_changes():
+            new_login = login_input.text().strip()
+            if not new_login:
+                QMessageBox.warning(dialog, "Ошибка", "Введите логин пользователя")
+                return
+
+            if new_login == current_login:
+                QMessageBox.information(dialog, "Информация", "Логин не изменился")
+                dialog.reject()
+                return
+
+            # Проверяем уникальность логина
+            check_query = "SELECT COUNT(*) FROM users WHERE login = %s AND id != %s"
+            result = db.execute_query(check_query, (new_login, user_id))
+
+            if result and result[0][0] > 0:
+                QMessageBox.warning(dialog, "Ошибка", "Пользователь с таким логином уже существует")
+                return
+
+            try:
+                query = "UPDATE users SET login = %s WHERE id = %s"
+                success = db.execute_query(query, (new_login, user_id), fetch=False)
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Логин пользователя обновлен")
+                    dialog.accept()
+                    parent_dialog.accept()
+                    self.load_users()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось обновить логин")
+
+            except Exception as e:
+                print(f"❌ Ошибка при изменении логина: {e}")
+                QMessageBox.critical(dialog, "Ошибка", f"Ошибка при изменении логина:\n{str(e)}")
+
+        save_btn.clicked.connect(save_changes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def edit_user_password(self, user_id, user_login, parent_dialog):
+        """Изменение пароля пользователя"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Изменение пароля: {user_login}")
+        dialog.setFixedSize(400, 200)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        confirm_input = QLineEdit()
+        confirm_input.setEchoMode(QLineEdit.EchoMode.Password)
+
+        form_layout.addRow("Новый пароль:", password_input)
+        form_layout.addRow("Подтверждение:", confirm_input)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_changes():
+            password = password_input.text()
+            confirm = confirm_input.text()
+
+            if not password:
+                QMessageBox.warning(dialog, "Ошибка", "Введите пароль")
+                return
+
+            if password != confirm:
+                QMessageBox.warning(dialog, "Ошибка", "Пароли не совпадают")
+                return
+
+            try:
+                from user_manager import UserManager
+                user_manager = UserManager()
+                hashed_password = user_manager.hash_password(password)
+
+                query = "UPDATE users SET password_hash = %s WHERE id = %s"
+                success = db.execute_query(query, (hashed_password, user_id), fetch=False)
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Пароль пользователя обновлен")
+                    dialog.accept()
+                    parent_dialog.accept()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось обновить пароль")
+
+            except Exception as e:
+                print(f"❌ Ошибка при изменении пароля: {e}")
+                QMessageBox.critical(dialog, "Ошибка", f"Ошибка при изменении пароля:\n{str(e)}")
+
+        save_btn.clicked.connect(save_changes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def edit_user_role(self, user_id, user_login, current_role, parent_dialog):
+        """Изменение роли пользователя"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Изменение роли: {user_login}")
+        dialog.setFixedSize(400, 150)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+        role_combo = QComboBox()
+
+        role_combo.addItem("Администратор", "admin")
+        role_combo.addItem("Сотрудник кафедры", "dekanat")
+        role_combo.addItem("Преподаватель", "teacher")
+        role_combo.addItem("Студент", "student")
+
+        # Устанавливаем текущую роль
+        index = role_combo.findData(current_role)
+        if index >= 0:
+            role_combo.setCurrentIndex(index)
+
+        form_layout.addRow("Новая роль:", role_combo)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_changes():
+            new_role = role_combo.currentData()
+
+            if new_role == current_role:
+                QMessageBox.information(dialog, "Информация", "Роль не изменилась")
+                dialog.reject()
+                return
+
+            try:
+                query = "UPDATE users SET role = %s WHERE id = %s"
+                success = db.execute_query(query, (new_role, user_id), fetch=False)
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Роль пользователя обновлена")
+                    dialog.accept()
+                    parent_dialog.accept()
+                    self.load_users()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось обновить роль")
+
+            except Exception as e:
+                print(f"❌ Ошибка при изменении роли: {e}")
+                QMessageBox.critical(dialog, "Ошибка", f"Ошибка при изменении роли:\n{str(e)}")
+
+        save_btn.clicked.connect(save_changes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def toggle_user_status(self, user_id, user_login, parent_dialog):
+        """Изменение статуса пользователя (активен/заблокирован)"""
+        try:
+            # Получаем текущий статус
+            query = "SELECT is_active FROM users WHERE id = %s"
+            result = db.execute_query(query, (user_id,))
+
+            if not result:
+                QMessageBox.warning(parent_dialog, "Ошибка", "Не удалось получить данные пользователя")
+                return
+
+            current_status = result[0][0]
+            new_status = not current_status
+
+            action = "разблокировать" if new_status else "заблокировать"
 
             reply = QMessageBox.question(
-                self,
-                "Подтверждение удаления",
-                f"Вы уверены, что хотите удалить пользователя?\n\n"
+                parent_dialog,
+                "Подтверждение",
+                f"Вы уверены, что хотите {action} пользователя?\n\n"
                 f"Логин: {user_login}\n"
                 f"ID: {user_id}",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
 
             if reply == QMessageBox.StandardButton.Yes:
-                self.delete_user(user_id)
+                query = "UPDATE users SET is_active = %s WHERE id = %s"
+                success = db.execute_query(query, (new_status, user_id), fetch=False)
 
-    def delete_user(self, user_id):
-        """Удаление пользователя"""
-        try:
-            query = "DELETE FROM users WHERE id = %s"
-            success = db.execute_query(query, (user_id,), fetch=False)
-
-            if success:
-                QMessageBox.information(self, "Успех", "Пользователь удален")
-                self.load_users()
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось удалить пользователя")
+                if success:
+                    status_text = "разблокирован" if new_status else "заблокирован"
+                    QMessageBox.information(parent_dialog, "Успех", f"Пользователь {status_text}")
+                    parent_dialog.accept()
+                    self.load_users()
+                else:
+                    QMessageBox.warning(parent_dialog, "Ошибка", f"Не удалось {action} пользователя")
 
         except Exception as e:
-            print(f"❌ Ошибка при удалении пользователя: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении пользователя:\n{str(e)}")
+            print(f"❌ Ошибка при изменении статуса пользователя: {e}")
+            QMessageBox.critical(parent_dialog, "Ошибка", f"Ошибка при изменении статуса:\n{str(e)}")
+
+    def delete_user(self, user_id, user_login, parent_dialog):
+        """Удаление пользователя"""
+        reply = QMessageBox.question(
+            parent_dialog,
+            "Подтверждение удаления",
+            f"Вы уверены, что хотите удалить пользователя?\n\n"
+            f"Логин: {user_login}\n"
+            f"ID: {user_id}\n\n"
+            f"Это действие нельзя отменить!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                query = "DELETE FROM users WHERE id = %s"
+                success = db.execute_query(query, (user_id,), fetch=False)
+
+                if success:
+                    QMessageBox.information(parent_dialog, "Успех", "Пользователь удален")
+                    parent_dialog.accept()
+                    self.load_users()
+                else:
+                    QMessageBox.warning(parent_dialog, "Ошибка", "Не удалось удалить пользователя")
+
+            except Exception as e:
+                print(f"❌ Ошибка при удалении пользователя: {e}")
+                QMessageBox.critical(parent_dialog, "Ошибка", f"Ошибка при удалении пользователя:\n{str(e)}")
 
     def export_users(self):
         """Экспорт списка пользователей"""
@@ -474,11 +746,218 @@ class AdminPanel(BasePanel):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при добавлении кафедры:\n{str(e)}")
 
     def load_departments(self):
-        """Загрузка кафедр"""
+        """Загрузка кафедр с кнопками действий"""
         query = "SELECT id, name, short_name FROM departments ORDER BY id"
         result = db.execute_query(query)
         if result:
-            self.populate_table(self.departments_table, result)
+            # Добавляем кнопки действий
+            table_data = []
+            for row in result:
+                table_data.append(row + ("✏️ 🗑️",))  # Редактировать и Удалить
+
+            self.populate_table(self.departments_table, table_data)
+
+    def on_department_action(self, row, column):
+        """Обработка действий с кафедрой"""
+        if column == 3:  # Колонка "Действия"
+            department_id = self.departments_table.item(row, 0).text()
+            department_name = self.departments_table.item(row, 1).text()
+
+            # Диалог выбора действия
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"Действия с кафедрой: {department_name}")
+            dialog.setFixedSize(300, 200)
+
+            layout = QVBoxLayout()
+
+            info_label = QLabel(f"Кафедра: {department_name}\nID: {department_id}")
+            info_label.setStyleSheet("font-weight: bold; margin-bottom: 20px;")
+            layout.addWidget(info_label)
+
+            edit_name_btn = QPushButton("✏️ Изменить название")
+            edit_short_btn = QPushButton("✏️ Изменить сокращение")
+            delete_btn = QPushButton("🗑️ Удалить кафедру")
+            cancel_btn = QPushButton("Отмена")
+
+            edit_name_btn.clicked.connect(lambda: self.edit_department_name(department_id, department_name, dialog))
+            edit_short_btn.clicked.connect(
+                lambda: self.edit_department_short_name(department_id, department_name, dialog))
+            delete_btn.clicked.connect(lambda: self.delete_department(department_id, department_name, dialog))
+            cancel_btn.clicked.connect(dialog.reject)
+
+            layout.addWidget(edit_name_btn)
+            layout.addWidget(edit_short_btn)
+            layout.addWidget(delete_btn)
+            layout.addWidget(cancel_btn)
+
+            dialog.setLayout(layout)
+            dialog.exec()
+
+    def edit_department_name(self, department_id, current_name, parent_dialog):
+        """Изменение названия кафедры"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Изменение названия кафедры")
+        dialog.setFixedSize(400, 150)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+        name_input = QLineEdit()
+        name_input.setText(current_name)
+        name_input.selectAll()
+
+        form_layout.addRow("Новое название:", name_input)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_changes():
+            new_name = name_input.text().strip()
+            if not new_name:
+                QMessageBox.warning(dialog, "Ошибка", "Введите название кафедры")
+                return
+
+            if new_name == current_name:
+                QMessageBox.information(dialog, "Информация", "Название не изменилось")
+                dialog.reject()
+                return
+
+            try:
+                query = "UPDATE departments SET name = %s WHERE id = %s"
+                success = db.execute_query(query, (new_name, department_id), fetch=False)
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Название кафедры обновлено")
+                    dialog.accept()
+                    parent_dialog.accept()
+                    self.load_departments()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось обновить название")
+
+            except Exception as e:
+                print(f"❌ Ошибка при изменении названия кафедры: {e}")
+                QMessageBox.critical(dialog, "Ошибка", f"Ошибка при изменении названия:\n{str(e)}")
+
+        save_btn.clicked.connect(save_changes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def edit_department_short_name(self, department_id, department_name, parent_dialog):
+        """Изменение сокращения кафедры"""
+        # Получаем текущее сокращение
+        query = "SELECT short_name FROM departments WHERE id = %s"
+        result = db.execute_query(query, (department_id,))
+        if not result:
+            QMessageBox.warning(self, "Ошибка", "Не удалось получить данные кафедры")
+            return
+
+        current_short_name = result[0][0]
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Изменение сокращения: {department_name}")
+        dialog.setFixedSize(400, 150)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+        short_name_input = QLineEdit()
+        short_name_input.setText(current_short_name)
+        short_name_input.selectAll()
+
+        form_layout.addRow("Новое сокращение:", short_name_input)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_changes():
+            new_short_name = short_name_input.text().strip()
+            if not new_short_name:
+                QMessageBox.warning(dialog, "Ошибка", "Введите сокращение кафедры")
+                return
+
+            if new_short_name == current_short_name:
+                QMessageBox.information(dialog, "Информация", "Сокращение не изменилось")
+                dialog.reject()
+                return
+
+            try:
+                query = "UPDATE departments SET short_name = %s WHERE id = %s"
+                success = db.execute_query(query, (new_short_name, department_id), fetch=False)
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Сокращение кафедры обновлено")
+                    dialog.accept()
+                    parent_dialog.accept()
+                    self.load_departments()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось обновить сокращение")
+
+            except Exception as e:
+                print(f"❌ Ошибка при изменении сокращения кафедры: {e}")
+                QMessageBox.critical(dialog, "Ошибка", f"Ошибка при изменении сокращения:\n{str(e)}")
+
+        save_btn.clicked.connect(save_changes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def delete_department(self, department_id, department_name, parent_dialog):
+        """Удаление кафедры"""
+        # Проверяем, есть ли связанные преподаватели
+        check_query = "SELECT COUNT(*) FROM teachers WHERE department_id = %s"
+        result = db.execute_query(check_query, (department_id,))
+
+        if result and result[0][0] > 0:
+            QMessageBox.warning(
+                parent_dialog,
+                "Ошибка",
+                f"Нельзя удалить кафедру '{department_name}'\n\n"
+                f"На кафедре числятся преподаватели.\n"
+                f"Сначала переместите или удалите преподавателей."
+            )
+            return
+
+        reply = QMessageBox.question(
+            parent_dialog,
+            "Подтверждение удаления",
+            f"Вы уверены, что хотите удалить кафедру?\n\n"
+            f"Название: {department_name}\n"
+            f"ID: {department_id}\n\n"
+            f"Это действие нельзя отменить!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                query = "DELETE FROM departments WHERE id = %s"
+                success = db.execute_query(query, (department_id,), fetch=False)
+
+                if success:
+                    QMessageBox.information(parent_dialog, "Успех", "Кафедра удалена")
+                    parent_dialog.accept()
+                    self.load_departments()
+                else:
+                    QMessageBox.warning(parent_dialog, "Ошибка", "Не удалось удалить кафедру")
+
+            except Exception as e:
+                print(f"❌ Ошибка при удалении кафедры: {e}")
+                QMessageBox.critical(parent_dialog, "Ошибка", f"Ошибка при удалении кафедры:\n{str(e)}")
 
     def load_logs(self):
         """Загрузка логов"""
@@ -741,6 +1220,11 @@ class AdminPanel(BasePanel):
             print(f"💥 Ошибка при оптимизации БД: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось оптимизировать БД:\n{str(e)}")
 
+    def load_initial_data(self):
+        """Загрузка начальных данных"""
+        self.load_users()
+        self.load_departments()
+        self.load_logs()
 
 class DekanatPanel(BasePanel):
     """Панель сотрудника кафедры"""
