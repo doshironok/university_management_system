@@ -18,9 +18,16 @@ class ReportGenerationThread(QThread):
         super().__init__()
         self.report_type = report_type
         self.kwargs = kwargs
+        self._is_running = True
 
     def run(self):
         try:
+            print(f"🔍 Запуск потока для отчета типа: {self.report_type}")
+
+            if not self._is_running:
+                return
+
+            file_path = None
             if self.report_type == 'record_book':
                 file_path = DocumentGenerator.generate_student_record_book(self.kwargs['student_id'])
             elif self.report_type == 'grades_report':
@@ -37,13 +44,29 @@ class ReportGenerationThread(QThread):
                 self.error.emit("Неизвестный тип отчета")
                 return
 
+            if not self._is_running:
+                return
+
             if file_path:
+                print(f"✅ Отчет успешно сгенерирован: {file_path}")
                 self.finished.emit(file_path)
             else:
-                self.error.emit("Не удалось сгенерировать отчет")
+                error_msg = "Не удалось сгенерировать отчет"
+                print(f"❌ {error_msg}")
+                self.error.emit(error_msg)
 
         except Exception as e:
-            self.error.emit(str(e))
+            error_msg = f"Критическая ошибка: {str(e)}"
+            print(f"💥 {error_msg}")
+            import traceback
+            traceback.print_exc()
+            self.error.emit(error_msg)
+
+    def stop(self):
+        """Остановка потока"""
+        self._is_running = False
+        self.quit()
+        self.wait(1000)
 
 
 class BaseReportDialog(QDialog):
@@ -522,3 +545,4 @@ class StudentRatingDialog(BaseReportDialog):
         """Обработка ошибки генерации"""
         progress.close()
         QMessageBox.critical(self, "❌ Ошибка", f"Не удалось сгенерировать отчет:\n{error}")
+

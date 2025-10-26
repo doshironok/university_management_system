@@ -4,35 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/university_management_system.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/check_panels.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/debug_auth.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/diagnose_roles.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/login_window.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/backup_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/data_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/services/report_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/user_manager.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/helpers.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/widgets/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/widgets/backup_dialog.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/widgets/editors.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/widgets/report_dialogs.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
+    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Первая стабильная версия (надо поработать над сайдбаром и отчётами)">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/report_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/report_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/widgets/report_dialogs.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/report_dialogs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/widgets/role_panels.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -49,28 +25,40 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 3
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "doshironok"
+  }
 }]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/doshironok/university_management_system.git",
+    "accountId": "98f77fb0-586c-4000-af3a-2a6f385f4d1e"
+  }
+}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
   <component name="ProjectId" id="34WUjWZYlUhVL2NZ2q99ZC80DOq" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.check_panels.executor": "Run",
-    "Python.diagnose_roles.executor": "Run",
-    "Python.login_window.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.main_window.executor": "Run",
-    "Python.report_service.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.check_panels.executor&quot;: &quot;Run&quot;,
+    &quot;Python.diagnose_roles.executor&quot;: &quot;Run&quot;,
+    &quot;Python.login_window.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main_window.executor&quot;: &quot;Run&quot;,
+    &quot;Python.report_service.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -87,6 +75,30 @@
       <option name="presentableId" value="Default" />
       <updated>1761328957178</updated>
     </task>
+    <task id="LOCAL-00001" summary="Первая стабильная версия (надо поработать над сайдбаром и отчётами)">
+      <option name="closed" value="true" />
+      <created>1761505697769</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1761505697769</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Первая стабильная версия (надо поработать над сайдбаром и отчётами)" />
+    <option name="LAST_COMMIT_MESSAGE" value="Первая стабильная версия (надо поработать над сайдбаром и отчётами)" />
   </component>
 </project>
