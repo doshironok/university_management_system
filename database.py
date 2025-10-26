@@ -76,6 +76,54 @@ class Database:
         result = self.execute_query(query, (login,))
         return result[0] if result else None
 
+    def execute_vacuum(self):
+        """Выполнение VACUUM вне транзакции"""
+        try:
+            # Закрываем текущую транзакцию если есть
+            if self.connection:
+                self.connection.commit()
+
+            # Выполняем VACUUM без транзакции
+            self.cursor.execute("VACUUM ANALYZE")
+            print("✅ VACUUM ANALYZE выполнен успешно")
+            return True
+
+        except Exception as e:
+            print(f"Ошибка выполнения VACUUM: {e}")
+            # Пытаемся восстановить соединение
+            try:
+                self.connection.rollback()
+            except:
+                pass
+            return False
+
+    def execute_without_transaction(self, query):
+        """Выполнение запроса без транзакции"""
+        try:
+            # Закрываем текущую транзакцию
+            if self.connection:
+                self.connection.commit()
+
+            # Устанавливаем autocommit для этого запроса
+            old_autocommit = self.connection.autocommit
+            self.connection.autocommit = True
+
+            self.cursor.execute(query)
+
+            # Восстанавливаем предыдущее состояние
+            self.connection.autocommit = old_autocommit
+
+            return True
+
+        except Exception as e:
+            print(f"Ошибка выполнения запроса без транзакции: {e}")
+            # Пытаемся восстановить соединение
+            try:
+                self.connection.autocommit = False
+                self.connection.rollback()
+            except:
+                pass
+            return False
 
 # Глобальный экземпляр базы данных
 db = Database()

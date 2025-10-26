@@ -22,6 +22,24 @@ class BackupThread(QThread):
             self.error.emit(str(e))
 
 
+class RestoreThread(QThread):
+    """Поток для восстановления базы данных"""
+    finished = pyqtSignal(bool)
+    error = pyqtSignal(str)
+
+    def __init__(self, backup_file):
+        super().__init__()
+        self.backup_file = backup_file
+
+    def run(self):
+        try:
+            from services.backup_service import BackupService
+            success = BackupService.restore_backup(self.backup_file)
+            self.finished.emit(success)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class BackupDialog(QDialog):
     """Диалог управления резервными копиями"""
 

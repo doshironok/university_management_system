@@ -1,3 +1,5 @@
+import os
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLineEdit, QComboBox, QMessageBox,
@@ -5,7 +7,11 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QDateEdit, QSpinBox, QCheckBox, QDialog, QProgressDialog)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont, QColor
+
+from config.settings import Settings
 from database import db
+from utils.helpers import get_file_size
+from widgets.backup_dialog import RestoreThread
 from widgets.report_dialogs import ReportGenerationThread
 
 
@@ -93,23 +99,31 @@ class AdminPanel(BasePanel):
         self.layout.addWidget(tabs)
 
     def create_users_tab(self):
+        """Вкладка управления пользователями"""
         widget = QWidget()
         layout = QVBoxLayout()
 
         # Панель управления
         control_panel = QHBoxLayout()
 
-        refresh_btn = QPushButton("Обновить")
-        refresh_btn.clicked.connect(self.load_users)
+        add_user_btn = QPushButton("➕ Добавить пользователя")
+        refresh_btn = QPushButton("🔄 Обновить")
+        export_btn = QPushButton("📊 Экспорт")
 
+        add_user_btn.clicked.connect(self.show_add_user_dialog)
+        refresh_btn.clicked.connect(self.load_users)
+        export_btn.clicked.connect(self.export_users)
+
+        control_panel.addWidget(add_user_btn)
         control_panel.addWidget(refresh_btn)
+        control_panel.addWidget(export_btn)
         control_panel.addStretch()
 
         layout.addLayout(control_panel)
 
         # Таблица пользователей
         self.users_table = self.create_table([
-            "ID", "Логин", "Роль", "Преподаватель", "Студент"
+            "ID", "Логин", "Роль", "Преподаватель", "Студент", "Статус", "Действия"
         ])
         layout.addWidget(self.users_table)
 
@@ -159,22 +173,265 @@ class AdminPanel(BasePanel):
         return widget
 
     def load_users(self):
-        """Загрузка пользователей"""
-        query = """
-        SELECT u.id, u.login, u.role, 
-               COALESCE(t.fio, 'Нет'), 
-               COALESCE(s.fio, 'Нет')
-        FROM users u
-        LEFT JOIN teachers t ON u.teacher_id = t.id
-        LEFT JOIN students s ON u.student_id = s.id
-        ORDER BY u.id
-        """
-        result = db.execute_query(query)
+        """Загрузка пользователей с учетом возможного отсутствия столбца is_active"""
+        try:
+            # Пробуем запрос с is_active
+            query = """
+            SELECT u.id, u.login, u.role, 
+                   COALESCE(t.fio, 'Не привязан'), 
+                   COALESCE(s.fio, 'Не привязан'),
+                   CASE WHEN u.is_active THEN 'Активен' ELSE 'Заблокирован' END as status
+            FROM users u
+            LEFT JOIN teachers t ON u.teacher_id = t.id
+            LEFT JOIN students s ON u.student_id = s.id
+            ORDER BY u.id
+            """
+            result = db.execute_query(query)
+        except Exception as e:
+            if 'is_active' in str(e):
+                # Если столбец is_active не существует, используем запрос без него
+                print("⚠️ Столбец is_active не найден, загружаем без статуса")
+                query = """
+                SELECT u.id, u.login, u.role, 
+                       COALESCE(t.fio, 'Не привязан'), 
+                       COALESCE(s.fio, 'Не привязан'),
+                       'Активен' as status
+                FROM users u
+                LEFT JOIN teachers t ON u.teacher_id = t.id
+                LEFT JOIN students s ON u.student_id = s.id
+                ORDER BY u.id
+                """
+                result = db.execute_query(query)
+            else:
+                raise e
+
         if result:
-            self.populate_table(self.users_table, result)
+            # Добавляем кнопки действий
+            table_data = []
+            for row in result:
+                table_data.append(row + ("✏️ Удалить",))
+
+            self.populate_table(self.users_table, table_data)
+
+            # Подключаем обработчик двойного клика
+            self.users_table.cellDoubleClicked.connect(self.on_user_action)
+
+    def show_add_user_dialog(self):
+        """Диалог добавления нового пользователя"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавление пользователя")
+        dialog.setFixedSize(400, 350)
+
+        layout = QVBoxLayout()
+
+        # Форма
+        form_layout = QFormLayout()
+
+        login_input = QLineEdit()
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        role_combo = QComboBox()
+        teacher_combo = QComboBox()
+        student_combo = QComboBox()
+        status_checkbox = QCheckBox("Активный")
+        status_checkbox.setChecked(True)
+
+        # Заполняем роли
+        role_combo.addItem("Выберите роль", None)
+        role_combo.addItem("Администратор", "admin")
+        role_combo.addItem("Сотрудник кафедры", "dekanat")
+        role_combo.addItem("Преподаватель", "teacher")
+        role_combo.addItem("Студент", "student")
+
+        # Заполняем преподавателей
+        teacher_combo.addItem("Не привязан", None)
+        teachers = db.execute_query("SELECT id, fio FROM teachers ORDER BY fio")
+        if teachers:
+            for teacher_id, teacher_fio in teachers:
+                teacher_combo.addItem(teacher_fio, teacher_id)
+
+        # Заполняем студентов
+        student_combo.addItem("Не привязан", None)
+        students = db.execute_query("SELECT id, fio FROM students ORDER BY fio")
+        if students:
+            for student_id, student_fio in students:
+                student_combo.addItem(student_fio, student_id)
+
+        form_layout.addRow("Логин:", login_input)
+        form_layout.addRow("Пароль:", password_input)
+        form_layout.addRow("Роль:", role_combo)
+        form_layout.addRow("Преподаватель:", teacher_combo)
+        form_layout.addRow("Студент:", student_combo)
+        form_layout.addRow("Статус:", status_checkbox)
+
+        # Кнопки
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        def save_user():
+            self.save_new_user(
+                login_input.text().strip(),
+                password_input.text(),
+                role_combo.currentData(),
+                teacher_combo.currentData(),
+                student_combo.currentData(),
+                status_checkbox.isChecked(),
+                dialog
+            )
+
+        save_btn.clicked.connect(save_user)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(form_layout)
+        layout.addLayout(button_layout)
+        dialog.setLayout(layout)
+
+        dialog.exec()
+
+    def save_new_user(self, login, password, role, teacher_id, student_id, is_active, dialog):
+        """Сохранение нового пользователя"""
+        if not login or not password or not role:
+            QMessageBox.warning(dialog, "Ошибка", "Заполните логин, пароль и выберите роль")
+            return
+
+        try:
+            from user_manager import UserManager
+            user_manager = UserManager()
+
+            # Хешируем пароль
+            hashed_password = user_manager.hash_password(password)
+
+            # Получаем следующий ID (без использования последовательности)
+            max_id_query = "SELECT COALESCE(MAX(id), 0) + 1 FROM users"
+            result = db.execute_query(max_id_query)
+
+            if result:
+                next_id = result[0][0]
+
+                # Вставляем пользователя (без is_active если столбца нет)
+                try:
+                    # Пробуем вставить с is_active
+                    query = """
+                    INSERT INTO users (id, login, password_hash, role, teacher_id, student_id, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """
+                    success = db.execute_query(query, (
+                        next_id, login, hashed_password, role,
+                        teacher_id, student_id, is_active
+                    ), fetch=False)
+                except Exception as e:
+                    if 'is_active' in str(e):
+                        # Если столбец is_active не существует, вставляем без него
+                        print("⚠️ Столбец is_active не найден, вставляем без него")
+                        query = """
+                        INSERT INTO users (id, login, password_hash, role, teacher_id, student_id)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """
+                        success = db.execute_query(query, (
+                            next_id, login, hashed_password, role,
+                            teacher_id, student_id
+                        ), fetch=False)
+                    else:
+                        raise e
+
+                if success:
+                    QMessageBox.information(dialog, "Успех", "Пользователь добавлен")
+                    dialog.accept()
+                    self.load_users()
+                else:
+                    QMessageBox.warning(dialog, "Ошибка", "Не удалось добавить пользователя")
+            else:
+                QMessageBox.warning(dialog, "Ошибка", "Не удалось получить ID для пользователя")
+
+        except Exception as e:
+            print(f"❌ Ошибка при добавлении пользователя: {e}")
+            QMessageBox.critical(dialog, "Ошибка", f"Ошибка при добавлении пользователя:\n{str(e)}")
+
+
+    def on_user_action(self, row, column):
+        """Обработка действий с пользователем"""
+        if column == 6:  # Колонка "Действия"
+            user_id = self.users_table.item(row, 0).text()
+            user_login = self.users_table.item(row, 1).text()
+
+            reply = QMessageBox.question(
+                self,
+                "Подтверждение удаления",
+                f"Вы уверены, что хотите удалить пользователя?\n\n"
+                f"Логин: {user_login}\n"
+                f"ID: {user_id}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                self.delete_user(user_id)
+
+    def delete_user(self, user_id):
+        """Удаление пользователя"""
+        try:
+            query = "DELETE FROM users WHERE id = %s"
+            success = db.execute_query(query, (user_id,), fetch=False)
+
+            if success:
+                QMessageBox.information(self, "Успех", "Пользователь удален")
+                self.load_users()
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось удалить пользователя")
+
+        except Exception as e:
+            print(f"❌ Ошибка при удалении пользователя: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении пользователя:\n{str(e)}")
+
+    def export_users(self):
+        """Экспорт списка пользователей"""
+        try:
+            from datetime import datetime
+            import csv
+
+            # Получаем данные пользователей
+            query = """
+            SELECT u.id, u.login, u.role, u.is_active,
+                   COALESCE(t.fio, ''), 
+                   COALESCE(s.fio, ''),
+                   u.created_at
+            FROM users u
+            LEFT JOIN teachers t ON u.teacher_id = t.id
+            LEFT JOIN students s ON u.student_id = s.id
+            ORDER BY u.id
+            """
+            users_data = db.execute_query(query)
+
+            if not users_data:
+                QMessageBox.information(self, "Информация", "Нет данных для экспорта")
+                return
+
+            # Сохраняем в CSV
+            backup_dir = os.path.join(Settings.REPORTS_DIR, 'exports')
+            os.makedirs(backup_dir, exist_ok=True)
+
+            filename = f"users_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            file_path = os.path.join(backup_dir, filename)
+
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow(['ID', 'Логин', 'Роль', 'Статус', 'Преподаватель', 'Студент', 'Дата создания'])
+
+                for user in users_data:
+                    status = 'Активен' if user[3] else 'Заблокирован'
+                    writer.writerow([user[0], user[1], user[2], status, user[4], user[5], user[6]])
+
+            QMessageBox.information(self, "Успех", f"Данные экспортированы в файл:\n{file_path}")
+
+        except Exception as e:
+            print(f"❌ Ошибка при экспорте пользователей: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при экспорте:\n{str(e)}")
 
     def add_department(self):
-        """Добавление новой кафедры"""
+        """Добавление новой кафедры с автоматическим ID"""
         name = self.dept_name_input.text().strip()
         short_name = self.dept_short_name_input.text().strip()
 
@@ -182,14 +439,39 @@ class AdminPanel(BasePanel):
             QMessageBox.warning(self, "Ошибка", "Заполните все поля")
             return
 
-        query = "INSERT INTO departments (name, short_name) VALUES (%s, %s)"
-        if db.execute_query(query, (name, short_name), fetch=False):
-            QMessageBox.information(self, "Успех", "Кафедра добавлена")
-            self.dept_name_input.clear()
-            self.dept_short_name_input.clear()
-            self.load_departments()
-        else:
-            QMessageBox.warning(self, "Ошибка", "Не удалось добавить кафедру")
+        try:
+            # Получаем следующий ID из последовательности
+            id_query = "SELECT nextval('departments_id_seq')"
+            result = db.execute_query(id_query)
+
+            if not result:
+                # Если последовательности нет, находим максимальный ID и добавляем 1
+                max_id_query = "SELECT COALESCE(MAX(id), 0) + 1 FROM departments"
+                result = db.execute_query(max_id_query)
+
+            if result:
+                next_id = result[0][0]
+
+                # Вставляем с явным указанием ID
+                query = """
+                INSERT INTO departments (id, name, short_name, created_at) 
+                VALUES (%s, %s, %s, NOW())
+                """
+                success = db.execute_query(query, (next_id, name, short_name), fetch=False)
+
+                if success:
+                    QMessageBox.information(self, "Успех", "Кафедра добавлена")
+                    self.dept_name_input.clear()
+                    self.dept_short_name_input.clear()
+                    self.load_departments()
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось добавить кафедру")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось получить ID для кафедры")
+
+        except Exception as e:
+            print(f"❌ Ошибка при добавлении кафедры: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при добавлении кафедры:\n{str(e)}")
 
     def load_departments(self):
         """Загрузка кафедр"""
@@ -287,20 +569,50 @@ class AdminPanel(BasePanel):
             self.last_backup_label.setText("Ошибка")
 
     def create_backup(self):
-        """Создание резервной копии"""
-        from widgets.backup_dialog import BackupThread
-        from PyQt6.QtWidgets import QProgressDialog
-        from PyQt6.QtCore import Qt
+        """Создание резервной копии - полная версия"""
+        try:
+            print("🔄 ПОЛНОЦЕННОЕ СОЗДАНИЕ РЕЗЕРВНОЙ КОПИИ")
 
-        progress = QProgressDialog("Создание резервной копии...", "Отмена", 0, 0, self)
-        progress.setWindowTitle("Пожалуйста, подождите")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+            from services.backup_service import BackupService
 
-        self.backup_thread = BackupThread()
-        self.backup_thread.finished.connect(lambda path: self.on_backup_created(path, progress))
-        self.backup_thread.error.connect(lambda error: self.on_backup_error(error, progress))
-        self.backup_thread.start()
+            progress = QProgressDialog("Создание резервной копии...", "Отмена", 0, 0, self)
+            progress.setWindowTitle("Пожалуйста, подождите")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setFixedSize(400, 120)
+            progress.show()
+
+            # Создаем бэкап (автоматически выберет лучший метод)
+            print("🎯 Запускаем создание бэкапа...")
+            backup_file = BackupService.create_backup()
+
+            progress.close()
+
+            if backup_file:
+                file_size = os.path.getsize(backup_file)
+                print(f"✅ Резервная копия создана: {backup_file} ({file_size} bytes)")
+
+                QMessageBox.information(self, "Успех",
+                                        f"Резервная копия успешно создана!\n\n"
+                                        f"Метод: {'pg_dump' if 'pg_dump' in backup_file else 'Python'}\n"
+                                        f"Файл: {os.path.basename(backup_file)}\n"
+                                        f"Размер: {file_size} байт\n"
+                                        f"Путь: {backup_file}")
+                self.load_database_info()
+            else:
+                print("❌ Не удалось создать резервную копию")
+                QMessageBox.critical(self, "Ошибка",
+                                     "Не удалось создать резервную копию\n\n"
+                                     "Все методы создания бэкапа завершились ошибкой.\n"
+                                     "Проверьте:\n"
+                                     "• Подключение к базе данных\n"
+                                     "• Права на запись файлов\n"
+                                     "• Доступность pg_dump (для ускорения)")
+
+        except Exception as e:
+            print(f"💥 Ошибка при создании бэкапа: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать резервную копию:\n{str(e)}")
 
     def on_backup_created(self, file_path, progress):
         """Обработка успешного создания бэкапа"""
@@ -312,6 +624,65 @@ class AdminPanel(BasePanel):
         """Обработка ошибки создания бэкапа"""
         progress.close()
         QMessageBox.critical(self, "Ошибка", f"Не удалось создать резервную копию:\n{error}")
+
+    def restore_backup(self):
+        """Восстановление из резервной копии с улучшенной диагностикой"""
+        current_item = self.backup_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Ошибка", "Выберите резервную копию для восстановления")
+            return
+
+        backup_data = current_item.data(Qt.ItemDataRole.UserRole)
+
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение восстановления",
+            f"ВНИМАНИЕ: Это действие НЕОБРАТИМО!\n\n"
+            f"Вы уверены, что хотите восстановить базу данных?\n"
+            f"Файл: {backup_data['filename']}\n"
+            f"Размер: {get_file_size(backup_data['path'])}\n"
+            f"Создан: {backup_data['created']}\n\n"
+            f"⚠️  Все текущие данные будут УДАЛЕНЫ и заменены данными из бэкапа!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No  # По умолчанию "Нет" для безопасности
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            progress = QProgressDialog("Восстановление базы данных...", "Отмена", 0, 0, self)
+            progress.setWindowTitle("Пожалуйста, подождите")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setFixedSize(500, 150)
+            progress.show()
+
+            # Запускаем восстановление в отдельном потоке
+            self.restore_thread = RestoreThread(backup_data['path'])
+            self.restore_thread.finished.connect(lambda success: self.on_restore_finished(success, progress))
+            self.restore_thread.error.connect(lambda error: self.on_restore_error(error, progress))
+            self.restore_thread.start()
+
+    def on_restore_finished(self, success, progress):
+        """Обработка завершения восстановления"""
+        progress.close()
+
+        if success:
+            QMessageBox.information(self, "Успех",
+                                    "База данных успешно восстановлена из резервной копии!\n\n"
+                                    "Рекомендуется:\n"
+                                    "• Перезапустить приложение\n"
+                                    "• Проверить целостность данных")
+        else:
+            QMessageBox.critical(self, "Ошибка",
+                                 "Не удалось восстановить базу данных\n\n"
+                                 "Возможные причины:\n"
+                                 "• Несовместимость формата бэкапа\n"
+                                 "• Ошибки в SQL скрипте\n"
+                                 "• Проблемы с подключением к БД\n\n"
+                                 "Проверьте консоль для детальной информации.")
+
+    def on_restore_error(self, error, progress):
+        """Обработка ошибки восстановления"""
+        progress.close()
+        QMessageBox.critical(self, "Ошибка", f"Ошибка при восстановлении:\n{error}")
 
     def manage_backups(self):
         """Управление резервными копиями"""
@@ -326,26 +697,49 @@ class AdminPanel(BasePanel):
             self,
             "Оптимизация базы данных",
             "Выполнить оптимизацию (VACUUM ANALYZE) базы данных?\n\n"
-            "Эта операция может занять некоторое время.",
+            "Эта операция:\n"
+            "• Улучшит производительность БД\n"
+            "• Освободит занятое место\n"
+            "• Обновит статистику для оптимизатора\n"
+            "• Может занять некоторое время\n\n"
+            "Продолжить?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                progress = QProgressDialog("Оптимизация базы данных...", "Отмена", 0, 0, self)
+                progress = QProgressDialog("Оптимизация базы данных...\nЭто может занять несколько минут.",
+                                           "Отмена", 0, 0, self)
                 progress.setWindowTitle("Пожалуйста, подождите")
                 progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setFixedSize(500, 150)
                 progress.show()
 
-                # Выполняем VACUUM ANALYZE
-                db.execute_query("VACUUM ANALYZE", fetch=False)
-
-                progress.close()
-                QMessageBox.information(self, "Успех", "Оптимизация базы данных завершена")
-                self.load_database_info()
+                # Даем прогресс-диалогу время отобразиться
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(100, self._perform_optimization)
 
             except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось оптимизировать БД:\n{str(e)}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось запустить оптимизацию:\n{str(e)}")
+
+    def _perform_optimization(self):
+        """Выполнение оптимизации базы данных"""
+        try:
+            print("🔧 ЗАПУСК ОПТИМИЗАЦИИ БАЗЫ ДАННЫХ")
+
+            # Используем метод без транзакции
+            success = db.execute_without_transaction("VACUUM ANALYZE")
+
+            if success:
+                print("✅ Оптимизация базы данных завершена")
+                self.load_database_info()
+                QMessageBox.information(self, "Успех", "Оптимизация базы данных завершена успешно!")
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось выполнить оптимизацию базы данных")
+
+        except Exception as e:
+            print(f"💥 Ошибка при оптимизации БД: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось оптимизировать БД:\n{str(e)}")
 
 
 class DekanatPanel(BasePanel):
