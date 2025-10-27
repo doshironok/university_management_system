@@ -32,9 +32,10 @@ class StudentEditor(QDialog):
 
         # Заполняем данные если редактируем
         if self.student_data:
-            self.fio_input.setText(self.student_data[1])
-            self.record_book_input.setText(self.student_data[2])
-            self.status_checkbox.setChecked(self.student_data[4])
+            self.fio_input.setText(self.student_data[1] if self.student_data[1] else "")
+            self.record_book_input.setText(self.student_data[2] if self.student_data[2] else "")
+            if len(self.student_data) > 4:
+                self.status_checkbox.setChecked(bool(self.student_data[4]))
 
         layout.addRow("ФИО:", self.fio_input)
         layout.addRow("Номер зачётной книжки:", self.record_book_input)
@@ -58,18 +59,22 @@ class StudentEditor(QDialog):
 
     def load_groups(self):
         """Загрузка списка групп"""
-        query = "SELECT id, name FROM groups ORDER BY name"
-        result = db.execute_query(query)
-        if result:
-            for group_id, group_name in result:
-                self.group_combo.addItem(group_name, group_id)
+        try:
+            query = "SELECT id, name FROM groups ORDER BY name"
+            result = db.execute_query(query)
+            if result:
+                for group_id, group_name in result:
+                    self.group_combo.addItem(group_name, group_id)
 
-            # Устанавливаем текущую группу если редактируем
-            if self.student_data:
-                current_group_id = self.student_data[5]  # group_id из данных студента
-                index = self.group_combo.findData(current_group_id)
-                if index >= 0:
-                    self.group_combo.setCurrentIndex(index)
+                # Устанавливаем текущую группу если редактируем
+                if self.student_data and len(self.student_data) > 5:
+                    current_group_id = self.student_data[5]  # group_id из данных студента
+                    if current_group_id:
+                        index = self.group_combo.findData(current_group_id)
+                        if index >= 0:
+                            self.group_combo.setCurrentIndex(index)
+        except Exception as e:
+            print(f"Ошибка при загрузке групп: {e}")
 
     def save_student(self):
         """Сохранение студента"""
@@ -83,15 +88,14 @@ class StudentEditor(QDialog):
             return
 
         try:
-            if self.student_data:
+            if self.student_data and self.student_data[0]:
                 # Обновление существующего студента
                 query = """
                 UPDATE students 
                 SET fio = %s, record_book_id = %s, group_id = %s, status = %s
                 WHERE id = %s
                 """
-                success = db.execute_query(query, (fio, record_book, group_id, status, self.student_data[0]),
-                                           fetch=False)
+                success = db.execute_query(query, (fio, record_book, group_id, status, self.student_data[0]), fetch=False)
                 message = "Данные студента обновлены"
             else:
                 # Добавление нового студента
@@ -110,10 +114,7 @@ class StudentEditor(QDialog):
 
         except Exception as e:
             print(f"Ошибка при сохранении студента: {e}")
-            import traceback
-            traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
-
 
 class GradeEditor(QDialog):
     """Диалог выставления оценки"""

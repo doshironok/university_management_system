@@ -4,11 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий">
+    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/report_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/report_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/widgets/editors.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/editors.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/widgets/role_panels.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
     </list>
@@ -120,7 +117,15 @@
       <option name="project" value="LOCAL" />
       <updated>1761515181262</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями">
+      <option name="closed" value="true" />
+      <created>1761585980259</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1761585980259</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -140,6 +145,7 @@
     <MESSAGE value="Исправлена проблема с отчётом по занятости аудиторий" />
     <MESSAGE value="Исправлена проблема с бэкапами, изменен функционал админа по работе с таблицей пользователей" />
     <MESSAGE value="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий" />
-    <option name="LAST_COMMIT_MESSAGE" value="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий" />
+    <MESSAGE value="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями" />
+    <option name="LAST_COMMIT_MESSAGE" value="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями" />
   </component>
 </project>

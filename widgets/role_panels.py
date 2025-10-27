@@ -1543,12 +1543,24 @@ class DekanatPanel(BasePanel):
 
     def load_initial_data(self):
         """Загрузка начальных данных"""
-        self.load_groups()
-        self.load_students()
-        self.load_teachers()
-        self.load_disciplines()
-        self.load_study_plans()
-        self.load_schedule()
+        print("🔄 Начало загрузки данных для DekanatPanel")
+        try:
+            self.load_groups()
+            print("✅ Группы загружены")
+            self.load_students()
+            print("✅ Студенты загружены")
+            self.load_teachers()
+            print("✅ Преподаватели загружены")
+            self.load_disciplines()
+            print("✅ Дисциплины загружены")
+            self.load_study_plans()
+            print("✅ Учебные планы загружены")
+            self.load_schedule()
+            print("✅ Расписание загружено")
+        except Exception as e:
+            print(f"💥 Ошибка при загрузке данных: {e}")
+            import traceback
+            traceback.print_exc()
 
     def create_teachers_tab(self):
         """Вкладка управления преподавателями"""
@@ -1928,8 +1940,8 @@ class DekanatPanel(BasePanel):
         try:
             query = """
             SELECT s.id, d.name, g.name, t.fio, c.number, 
-                   TO_CHAR(s.start_time, 'HH24:MI') as start_time, 
-                   TO_CHAR(s.end_time, 'HH24:MI') as end_time,
+                   TO_CHAR(s.start_time, 'Day') as day_of_week,
+                   CONCAT(TO_CHAR(s.start_time, 'HH24:MI'), '-', TO_CHAR(s.end_time, 'HH24:MI')) as time_range,
                    s.week_type
             FROM schedule s
             JOIN disciplines d ON s.discipline_id = d.id
@@ -1943,10 +1955,19 @@ class DekanatPanel(BasePanel):
                 # Добавляем кнопки действий
                 table_data = []
                 for row in result:
-                    # Объединяем время начала и конца
-                    time_str = f"{row[5]}-{row[6]}"
-                    new_row = (row[0], row[1], row[2], row[3], row[4], time_str, row[7])
-                    table_data.append(new_row + ("✏️ 🗑️",))
+                    # row[0] - id, row[1] - дисциплина, row[2] - группа, row[3] - преподаватель,
+                    # row[4] - аудитория, row[5] - день недели, row[6] - время, row[7] - тип недели
+                    table_data.append((
+                        row[0],  # ID
+                        row[1],  # Дисциплина
+                        row[2],  # Группа
+                        row[3] if row[3] else "Не назначен",  # Преподаватель
+                        row[4],  # Аудитория
+                        row[5].strip(),  # День недели (убираем лишние пробелы)
+                        row[6],  # Время
+                        row[7],  # Тип недели
+                        "✏️ 🗑️"  # Действия
+                    ))
                 self.populate_table(self.schedule_table, table_data)
             else:
                 self.schedule_table.setRowCount(0)
@@ -2023,24 +2044,43 @@ class DekanatPanel(BasePanel):
 
     def edit_student(self, row, column):
         """Редактирование студента"""
-        if column == 5:  # Колонка "Действия"
-            student_id = self.students_table.item(row, 0).text()
-            student_fio = self.students_table.item(row, 1).text()
-            record_book = self.students_table.item(row, 2).text()
-            group_name = self.students_table.item(row, 3).text()
-            status = self.students_table.item(row, 4).text() == "Активен"
+        try:
+            if column == 5:  # Колонка "Действия"
+                # Получаем данные из таблицы
+                student_id_item = self.students_table.item(row, 0)
+                student_fio_item = self.students_table.item(row, 1)
+                record_book_item = self.students_table.item(row, 2)
+                group_name_item = self.students_table.item(row, 3)
+                status_item = self.students_table.item(row, 4)
 
-            # Получаем group_id по имени группы
-            query = "SELECT id FROM groups WHERE name = %s"
-            result = db.execute_query(query, (group_name,))
-            group_id = result[0][0] if result else None
+                if not all([student_id_item, student_fio_item, record_book_item, group_name_item, status_item]):
+                    QMessageBox.warning(self, "Ошибка", "Не удалось получить данные студента")
+                    return
 
-            student_data = (student_id, student_fio, record_book, status, group_id)
+                student_id = student_id_item.text()
+                student_fio = student_fio_item.text()
+                record_book = record_book_item.text()
+                group_name = group_name_item.text()
+                status = status_item.text() == "Активен"
 
-            from widgets.editors import StudentEditor
-            editor = StudentEditor(student_data, parent=self)
-            if editor.exec() == QDialog.DialogCode.Accepted:
-                self.load_students()
+                # Получаем group_id по имени группы
+                query = "SELECT id FROM groups WHERE name = %s"
+                result = db.execute_query(query, (group_name,))
+                if not result:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось найти группу")
+                    return
+
+                group_id = result[0][0]
+
+                student_data = (student_id, student_fio, record_book, status, group_id)
+
+                from widgets.editors import StudentEditor
+                editor = StudentEditor(student_data, parent=self)
+                if editor.exec() == QDialog.DialogCode.Accepted:
+                    self.load_students()
+        except Exception as e:
+            print(f"Ошибка при редактировании студента: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при редактировании студента: {str(e)}")
 
     def create_reports_tab(self):
         """Вкладка отчетов для сотрудника кафедры"""
@@ -2933,38 +2973,6 @@ class TeacherPanel(BasePanel):
         self.load_groups_for_grading()
         # Очищаем таблицу студентов при смене дисциплины
         self.grades_table.setRowCount(0)
-
-    def load_students_for_grading(self):
-        """Загрузка студентов для выставления оценок"""
-        try:
-            discipline_id = self.grade_discipline_filter.currentData()
-            group_id = self.grade_group_filter.currentData()
-
-            if not discipline_id:
-                QMessageBox.warning(self, "Ошибка", "Выберите дисциплину")
-                return
-
-            query = """
-               SELECT s.id, s.fio, s.record_book_id, 
-                      COALESCE(g.grade, 'Нет оценки') as current_grade
-               FROM students s
-               JOIN groups gr ON s.group_id = gr.id
-               JOIN study_plans sp ON sp.group_id = gr.id AND sp.discipline_id = %s AND sp.teacher_id = %s
-               LEFT JOIN grades g ON g.student_id = s.id AND g.study_plan_id = sp.id
-               WHERE (%s IS NULL OR s.group_id = %s) AND s.status = true
-               ORDER BY s.fio
-               """
-            result = db.execute_query(query, (discipline_id, self.teacher_id, group_id, group_id))
-
-            if result:
-                self.populate_table(self.grades_table, result)
-            else:
-                self.grades_table.setRowCount(0)
-                QMessageBox.information(self, "Информация", "Нет студентов для выбранных параметров")
-
-        except Exception as e:
-            print(f"Ошибка при загрузке студентов: {e}")
-            QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить студентов: {str(e)}")
 
 
 class StudentPanel(BasePanel):
