@@ -85,13 +85,21 @@ class StudentEditor(QDialog):
         try:
             if self.student_data:
                 # Обновление существующего студента
-                success = DataService.update_student(
-                    self.student_data[0], fio, record_book, group_id, status
-                )
+                query = """
+                UPDATE students 
+                SET fio = %s, record_book_id = %s, group_id = %s, status = %s
+                WHERE id = %s
+                """
+                success = db.execute_query(query, (fio, record_book, group_id, status, self.student_data[0]),
+                                           fetch=False)
                 message = "Данные студента обновлены"
             else:
                 # Добавление нового студента
-                success = DataService.add_student(fio, record_book, group_id, status)
+                query = """
+                INSERT INTO students (fio, record_book_id, group_id, status)
+                VALUES (%s, %s, %s, %s)
+                """
+                success = db.execute_query(query, (fio, record_book, group_id, status), fetch=False)
                 message = "Студент добавлен"
 
             if success:
@@ -101,6 +109,9 @@ class StudentEditor(QDialog):
                 QMessageBox.warning(self, "Ошибка", "Не удалось сохранить данные")
 
         except Exception as e:
+            print(f"Ошибка при сохранении студента: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
 
 
@@ -332,6 +343,289 @@ class ScheduleEditor(QDialog):
                 self.accept()
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось добавить занятие")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
+
+
+class DisciplineEditor(QDialog):
+    """Редактор дисциплин"""
+
+    def __init__(self, discipline_data=None, parent=None):
+        super().__init__(parent)
+        self.discipline_data = discipline_data
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setWindowTitle("Редактор дисциплины")
+        self.setFixedSize(400, 300)
+
+        layout = QVBoxLayout()
+
+        form_layout = QFormLayout()
+
+        self.name_input = QLineEdit()
+        self.department_combo = QComboBox()
+
+        # Заполняем кафедры
+        departments = db.execute_query("SELECT id, name FROM departments ORDER BY name")
+        if departments:
+            for dept_id, dept_name in departments:
+                self.department_combo.addItem(dept_name, dept_id)
+
+        if self.discipline_data:
+            self.name_input.setText(self.discipline_data[1])
+            # Устанавливаем выбранную кафедру
+            index = self.department_combo.findData(self.discipline_data[2])
+            if index >= 0:
+                self.department_combo.setCurrentIndex(index)
+
+        form_layout.addRow("Название дисциплины:", self.name_input)
+        form_layout.addRow("Кафедра:", self.department_combo)
+
+        # Кнопки
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        save_btn.clicked.connect(self.save_discipline)
+        cancel_btn.clicked.connect(self.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(form_layout)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def save_discipline(self):
+        name = self.name_input.text().strip()
+        department_id = self.department_combo.currentData()
+
+        if not name or not department_id:
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля")
+            return
+
+        try:
+            if self.discipline_data:
+                # Редактирование
+                query = "UPDATE disciplines SET name = %s, department_id = %s WHERE id = %s"
+                success = db.execute_query(query, (name, department_id, self.discipline_data[0]), fetch=False)
+            else:
+                # Добавление
+                query = "INSERT INTO disciplines (name, department_id) VALUES (%s, %s)"
+                success = db.execute_query(query, (name, department_id), fetch=False)
+
+            if success:
+                QMessageBox.information(self, "Успех", "Дисциплина сохранена")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить дисциплину")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
+
+
+class StudyPlanEditor(QDialog):
+    """Редактор учебных планов"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setWindowTitle("Добавление учебного плана")
+        self.setFixedSize(500, 400)
+
+        layout = QVBoxLayout()
+        form_layout = QFormLayout()
+
+        self.discipline_combo = QComboBox()
+        self.group_combo = QComboBox()
+        self.teacher_combo = QComboBox()
+        self.semester_spin = QSpinBox()
+        self.lecture_hours_spin = QSpinBox()
+        self.practice_hours_spin = QSpinBox()
+
+        # Настройка спинбоксов
+        self.semester_spin.setRange(1, 12)
+        self.lecture_hours_spin.setRange(0, 200)
+        self.practice_hours_spin.setRange(0, 200)
+
+        # Заполняем комбобоксы
+        self.load_combobox_data()
+
+        form_layout.addRow("Дисциплина:", self.discipline_combo)
+        form_layout.addRow("Группа:", self.group_combo)
+        form_layout.addRow("Преподаватель:", self.teacher_combo)
+        form_layout.addRow("Семестр:", self.semester_spin)
+        form_layout.addRow("Лекционные часы:", self.lecture_hours_spin)
+        form_layout.addRow("Практические часы:", self.practice_hours_spin)
+
+        # Кнопки
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        save_btn.clicked.connect(self.save_plan)
+        cancel_btn.clicked.connect(self.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(form_layout)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def load_combobox_data(self):
+        """Загрузка данных в комбобоксы"""
+        # Дисциплины
+        disciplines = db.execute_query("SELECT id, name FROM disciplines ORDER BY name")
+        if disciplines:
+            for disc_id, disc_name in disciplines:
+                self.discipline_combo.addItem(disc_name, disc_id)
+
+        # Группы
+        groups = db.execute_query("SELECT id, name FROM groups ORDER BY name")
+        if groups:
+            for group_id, group_name in groups:
+                self.group_combo.addItem(group_name, group_id)
+
+        # Преподаватели
+        teachers = db.execute_query("SELECT id, fio FROM teachers ORDER BY fio")
+        if teachers:
+            for teacher_id, teacher_fio in teachers:
+                self.teacher_combo.addItem(teacher_fio, teacher_id)
+
+    def save_plan(self):
+        discipline_id = self.discipline_combo.currentData()
+        group_id = self.group_combo.currentData()
+        teacher_id = self.teacher_combo.currentData()
+        semester = self.semester_spin.value()
+        lecture_hours = self.lecture_hours_spin.value()
+        practice_hours = self.practice_hours_spin.value()
+
+        if not all([discipline_id, group_id, teacher_id]):
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля")
+            return
+
+        try:
+            query = """
+            INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            success = db.execute_query(query,
+                                       (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours),
+                                       fetch=False)
+
+            if success:
+                QMessageBox.information(self, "Успех", "Учебный план добавлен")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось добавить учебный план")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
+
+class TeacherEditor(QDialog):
+    """Диалог редактирования преподавателя"""
+
+    def __init__(self, teacher_data=None, parent=None):
+        super().__init__(parent)
+        self.teacher_data = teacher_data
+        self.setup_ui()
+        self.load_departments()
+
+    def setup_ui(self):
+        self.setWindowTitle("Редактирование преподавателя" if self.teacher_data else "Добавление преподавателя")
+        self.setFixedSize(400, 350)
+
+        layout = QFormLayout()
+
+        # Поля формы
+        self.fio_input = QLineEdit()
+        self.position_input = QLineEdit()
+        self.degree_input = QLineEdit()
+        self.department_combo = QComboBox()
+
+        # Заполняем данные если редактируем
+        if self.teacher_data:
+            self.fio_input.setText(self.teacher_data[1])
+            self.position_input.setText(self.teacher_data[2])
+            self.degree_input.setText(self.teacher_data[3])
+
+        layout.addRow("ФИО:", self.fio_input)
+        layout.addRow("Должность:", self.position_input)
+        layout.addRow("Учёная степень:", self.degree_input)
+        layout.addRow("Кафедра:", self.department_combo)
+
+        # Кнопки
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        cancel_btn = QPushButton("Отмена")
+
+        save_btn.clicked.connect(self.save_teacher)
+        cancel_btn.clicked.connect(self.reject)
+
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addRow(button_layout)
+
+        self.setLayout(layout)
+
+    def load_departments(self):
+        """Загрузка списка кафедр"""
+        query = "SELECT id, name FROM departments ORDER BY name"
+        result = db.execute_query(query)
+        if result:
+            for dept_id, dept_name in result:
+                self.department_combo.addItem(dept_name, dept_id)
+
+            # Устанавливаем текущую кафедру если редактируем
+            if self.teacher_data:
+                current_dept_id = self.teacher_data[4]  # department_id из данных преподавателя
+                index = self.department_combo.findData(current_dept_id)
+                if index >= 0:
+                    self.department_combo.setCurrentIndex(index)
+
+    def save_teacher(self):
+        """Сохранение преподавателя"""
+        fio = self.fio_input.text().strip()
+        position = self.position_input.text().strip()
+        degree = self.degree_input.text().strip()
+        department_id = self.department_combo.currentData()
+
+        if not fio or not position or not department_id:
+            QMessageBox.warning(self, "Ошибка", "Заполните все обязательные поля")
+            return
+
+        try:
+            if self.teacher_data:
+                # Обновление существующего преподавателя
+                query = """
+                UPDATE teachers 
+                SET fio = %s, position = %s, academic_degree = %s, department_id = %s
+                WHERE id = %s
+                """
+                success = db.execute_query(query, (fio, position, degree, department_id, self.teacher_data[0]), fetch=False)
+                message = "Данные преподавателя обновлены"
+            else:
+                # Добавление нового преподавателя
+                query = """
+                INSERT INTO teachers (fio, position, academic_degree, department_id)
+                VALUES (%s, %s, %s, %s)
+                """
+                success = db.execute_query(query, (fio, position, degree, department_id), fetch=False)
+                message = "Преподаватель добавлен"
+
+            if success:
+                QMessageBox.information(self, "Успех", message)
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить данные")
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")

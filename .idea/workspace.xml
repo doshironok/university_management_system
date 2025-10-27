@@ -4,10 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Первая стабильная версия (надо поработать над сайдбаром и отчётами)">
+    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/report_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/report_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/widgets/report_dialogs.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/report_dialogs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/widgets/editors.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/editors.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/widgets/role_panels.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -25,18 +27,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "doshironok"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;doshironok&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/doshironok/university_management_system.git",
-    "accountId": "98f77fb0-586c-4000-af3a-2a6f385f4d1e"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/doshironok/university_management_system.git&quot;,
+    &quot;accountId&quot;: &quot;98f77fb0-586c-4000-af3a-2a6f385f4d1e&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
@@ -48,14 +50,17 @@
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
+    &quot;Python.backup_service.executor&quot;: &quot;Run&quot;,
     &quot;Python.check_panels.executor&quot;: &quot;Run&quot;,
     &quot;Python.diagnose_roles.executor&quot;: &quot;Run&quot;,
     &quot;Python.login_window.executor&quot;: &quot;Run&quot;,
     &quot;Python.main.executor&quot;: &quot;Run&quot;,
     &quot;Python.main_window.executor&quot;: &quot;Run&quot;,
     &quot;Python.report_service.executor&quot;: &quot;Run&quot;,
+    &quot;Python.role_panels.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Diana/Desktop/Зубенко/ПИС/university_management_system&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
@@ -83,7 +88,39 @@
       <option name="project" value="LOCAL" />
       <updated>1761505697769</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Исправлена проблема с отчётом по студенческому рейтингу группы">
+      <option name="closed" value="true" />
+      <created>1761508731822</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1761508731822</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Исправлена проблема с отчётом по занятости аудиторий">
+      <option name="closed" value="true" />
+      <created>1761509323449</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1761509323449</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Исправлена проблема с бэкапами, изменен функционал админа по работе с таблицей пользователей">
+      <option name="closed" value="true" />
+      <created>1761514392914</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1761514392914</updated>
+    </task>
+    <task id="LOCAL-00005" summary="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий">
+      <option name="closed" value="true" />
+      <created>1761515181262</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1761515181262</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -99,6 +136,10 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Первая стабильная версия (надо поработать над сайдбаром и отчётами)" />
-    <option name="LAST_COMMIT_MESSAGE" value="Первая стабильная версия (надо поработать над сайдбаром и отчётами)" />
+    <MESSAGE value="Исправлена проблема с отчётом по студенческому рейтингу группы" />
+    <MESSAGE value="Исправлена проблема с отчётом по занятости аудиторий" />
+    <MESSAGE value="Исправлена проблема с бэкапами, изменен функционал админа по работе с таблицей пользователей" />
+    <MESSAGE value="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий" />
+    <option name="LAST_COMMIT_MESSAGE" value="В панели администратора реализованы:&#10;- Удаление кафедр с проверкой связанных данных&#10;- Редактирование названия и сокращения кафедр&#10;- Редактирование логина, пароля и роли пользователей&#10;- Блокировка/разблокировка пользователей&#10;- Удобный интерфейс с диалогами выбора действий" />
   </component>
 </project>

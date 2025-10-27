@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QStackedWidget, QMessageBox,
-                             QFrame, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal
+                             QFrame, QSizePolicy, QGroupBox)
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QPalette, QColor, QIcon
 from user_manager import user_manager
 from widgets.role_panels import AdminPanel, DekanatPanel, TeacherPanel, StudentPanel
@@ -69,6 +69,13 @@ class MainWindow(QMainWindow):
                 margin: 10px;
                 border: 1px solid #e0e0e0;
             }
+            QLabel#system_info {
+                color: #bdc3c7;
+                font-size: 11px;
+                line-height: 1.3;
+                padding: 10px;
+                text-align: center;
+            }
         """)
 
         # Центральный виджет
@@ -109,9 +116,14 @@ class MainWindow(QMainWindow):
         user_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(user_info)
 
-        # Навигационные кнопки
+        # Навигационные кнопки (упрощенная версия - только информационные виджеты)
         nav_buttons = self.create_navigation_buttons()
         layout.addWidget(nav_buttons)
+
+        # Растягивающийся элемент чтобы прижать остальные элементы к верху
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(spacer)
 
         # Кнопка выхода
         logout_btn = QPushButton("Выйти из системы")
@@ -119,63 +131,91 @@ class MainWindow(QMainWindow):
         logout_btn.clicked.connect(self.logout)
         layout.addWidget(logout_btn)
 
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(spacer)
+        # Информация о системе (ПОД кнопкой выхода)
+        system_info = self.create_system_info()
+        layout.addWidget(system_info)
 
         sidebar.setLayout(layout)
         return sidebar
 
     def create_navigation_buttons(self):
+        """Создание навигационных кнопок - упрощенная версия"""
         widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 20, 10, 20)
         layout.setSpacing(5)
 
-        # Кнопки навигации в зависимости от роли
-        role = user_manager.current_user['role']
-        print(f"Создание навигации для роли: {role}")  # Для отладки
+        # Только информационные виджеты, без функциональных кнопок
+        info_group = QGroupBox("Навигация")
+        info_layout = QVBoxLayout()
 
-        if role == 'admin':
-            buttons = [
-                ("📊 Панель управления", "dashboard"),
-                ("👥 Пользователи", "users"),
-                ("🏢 Кафедры", "departments"),
-                ("📋 Логи системы", "logs"),
-                ("💾 Резервные копии", "backup")
-            ]
-        elif role == 'dekanat':
-            buttons = [
-                ("👥 Студенты", "students"),
-                ("👨‍🏫 Преподаватели", "teachers"),
-                ("📋 Учебные планы", "study_plans"),
-                ("📅 Расписание", "schedule"),
-                ("📊 Отчеты", "reports")
-            ]
-        elif role == 'teacher':
-            buttons = [
-                ("📚 Мои дисциплины", "disciplines"),
-                ("📅 Моё расписание", "schedule"),
-                ("🎯 Успеваемость", "grades"),
-                ("📈 Нагрузка", "workload"),
-                ("📊 Отчеты", "reports")
-            ]
-        elif role == 'student':
-            buttons = [
-                ("📖 Успеваемость", "grades"),
-                ("📅 Расписание", "schedule"),
-                ("📚 Зачётная книжка", "record_book"),
-                ("📊 Отчеты", "reports")
-            ]
-        else:
-            buttons = []
+        # Информация о доступных разделах
+        nav_info = QLabel(
+            "Используйте вкладки в основной\n"
+            "области для перехода между\n"
+            "разделами системы"
+        )
+        nav_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nav_info.setWordWrap(True)
+        nav_info.setStyleSheet("""
+            QLabel {
+                color: #bdc3c7;
+                font-size: 12px;
+                line-height: 1.4;
+                padding: 10px;
+            }
+        """)
 
-        for text, action in buttons:
-            btn = QPushButton(text)
-            btn.setObjectName("nav_button")
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, a=action: self.show_section(a))
-            layout.addWidget(btn)
+        info_layout.addWidget(nav_info)
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+
+        widget.setLayout(layout)
+        return widget
+
+    def create_system_info(self):
+        """Создание блока информации о системе"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 5, 10, 10)
+        layout.setSpacing(5)
+
+        # Группа для информации о системе
+        system_group = QGroupBox("О системе")
+        system_group.setStyleSheet("""
+            QGroupBox {
+                color: #95a5a6;
+                font-size: 11px;
+                font-weight: bold;
+                border: 1px solid #34495e;
+                border-radius: 5px;
+                margin-top: 5px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 5px;
+                padding: 0 5px 0 5px;
+                color: #95a5a6;
+            }
+        """)
+
+        system_layout = QVBoxLayout()
+        system_layout.setContentsMargins(8, 15, 8, 8)
+
+        # Информация о системе
+        system_label = QLabel(
+            "Учебная деятельность кафедры\n"
+            "Система управления учебным процессом\n\n"
+            "Версия: 1.0\n"
+            "КубГТУ © 2025"
+        )
+        system_label.setObjectName("system_info")
+        system_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        system_label.setWordWrap(True)
+
+        system_layout.addWidget(system_label)
+        system_group.setLayout(system_layout)
+        layout.addWidget(system_group)
 
         widget.setLayout(layout)
         return widget
@@ -204,102 +244,61 @@ class MainWindow(QMainWindow):
         return role_names.get(role, role)
 
     def load_initial_data(self):
-        """Загрузка начальных данных в зависимости от роли"""
+        """Загрузка начальных данных"""
         role = user_manager.current_user['role']
         print(f"=== НАЧАЛО ЗАГРУЗКИ ДАННЫХ ===")
         print(f"🎯 Роль из user_manager: '{role}'")
-        print(f"🔍 Полный user_manager.current_user: {user_manager.current_user}")
 
         try:
             if role == 'admin':
-                print("👑 Создаем AdminPanel...")
                 self.admin_panel = AdminPanel()
                 self.stacked_widget.addWidget(self.admin_panel)
                 self.current_panel = self.admin_panel
-                print("✅ AdminPanel создана и добавлена")
 
             elif role == 'dekanat' or role == 'kafedra':
-                print("🏢 Создаем DekanatPanel...")
                 self.dekanat_panel = DekanatPanel()
                 self.stacked_widget.addWidget(self.dekanat_panel)
                 self.current_panel = self.dekanat_panel
-                print("✅ DekanatPanel создана и добавлена")
 
             elif role == 'teacher':
-                # ПРОВЕРКА ВСЕХ ВОЗМОЖНЫХ КЛЮЧЕЙ
-                teacher_id = user_manager.current_user.get('teacher_db_id')
-                teacher_id_alt = user_manager.current_user.get('teacher_id')
-                print(f"👨‍🏫 Ключи преподавателя:")
-                print(f"   teacher_db_id: {teacher_id}")
-                print(f"   teacher_id: {teacher_id_alt}")
-                print(f"   Все ключи: {list(user_manager.current_user.keys())}")
-                # Используем любой доступный ID
-                final_teacher_id = teacher_id or teacher_id_alt
-                print(f"🎯 Используем teacher_id: {final_teacher_id}")
-                if final_teacher_id:
-                    try:
-                        print("🔄 Создаем TeacherPanel...")
-                        self.teacher_panel = TeacherPanel(final_teacher_id)
-                        print("✅ TeacherPanel создана")
-                        self.stacked_widget.addWidget(self.teacher_panel)
-                        print("✅ TeacherPanel добавлена в stacked_widget")
-                        self.current_panel = self.teacher_panel
-                        print("✅ current_panel установлена")
-                        # ПРОВЕРКА СРАЗУ ПОСЛЕ СОЗДАНИЯ
-                        print(f"🔍 Проверка панели: {hasattr(self, 'teacher_panel')}")
-                        print(f"📦 Stacked widget count: {self.stacked_widget.count()}")
-                        print(f"🎯 Текущий виджет: {self.stacked_widget.currentWidget()}")
-                    except Exception as e:
-                        print(f"💥 Ошибка при создании TeacherPanel: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        QMessageBox.critical(self, "Ошибка", f"Не удалось создать панель преподавателя: {str(e)}")
+                teacher_id = user_manager.current_user.get('teacher_db_id') or user_manager.current_user.get(
+                    'teacher_id')
+                if teacher_id:
+                    self.teacher_panel = TeacherPanel(teacher_id)
+                    self.stacked_widget.addWidget(self.teacher_panel)
+                    self.current_panel = self.teacher_panel
                 else:
-                    print("❌ ID преподавателя не найден")
                     QMessageBox.warning(self, "Ошибка", "ID преподавателя не найден")
 
             elif role == 'student':
-                # Аналогично для студента
-                student_id = user_manager.current_user.get('student_db_id')
-                student_id_alt = user_manager.current_user.get('student_id')
-
-                print(f"🎓 Ключи студента:")
-                print(f"   student_db_id: {student_id}")
-                print(f"   student_id: {student_id_alt}")
-
-                final_student_id = student_id or student_id_alt
-                print(f"🎯 Используем student_id: {final_student_id}")
-
-                if final_student_id:
-                    self.student_panel = StudentPanel(final_student_id)
+                student_id = user_manager.current_user.get('student_db_id') or user_manager.current_user.get(
+                    'student_id')
+                if student_id:
+                    self.student_panel = StudentPanel(student_id)
                     self.stacked_widget.addWidget(self.student_panel)
                     self.current_panel = self.student_panel
-                    print("✅ StudentPanel создана и добавена")
                 else:
-                    print("❌ ID студента не найден")
+                    QMessageBox.warning(self, "Ошибка", "ID студента не найден")
 
-            print(f"🎉 Панель создана для роли: '{role}'")
-            print(f"📦 Тип текущей панели: {type(self.current_panel)}")
-            print(f"🔢 Количество виджетов в stacked_widget: {self.stacked_widget.count()}")
+            # Устанавливаем текущую панель
+            if self.current_panel:
+                self.stacked_widget.setCurrentWidget(self.current_panel)
+                # Загружаем данные после отображения
+                QTimer.singleShot(100, self.load_panel_data)
 
         except Exception as e:
-            print(f"💥 КРИТИЧЕСКАЯ ОШИБКА: {e}")
+            print(f"💥 Ошибка при загрузке интерфейса: {e}")
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить интерфейс: {str(e)}")
-        print(f"🎉 Панель создана для роли: '{role}'")
-        print(f"📦 Тип текущей панели: {type(self.current_panel)}")
-        print(f"🔢 Количество виджетов в stacked_widget: {self.stacked_widget.count()}")
 
-        # ДОБАВЬТЕ ЭТИ СТРОКИ:
-        if self.current_panel:
-            print("🔄 Устанавливаем текущую панель в stacked_widget...")
-            self.stacked_widget.setCurrentWidget(self.current_panel)
-            print("✅ Текущая панель установлена")
-        else:
-            print("❌ current_panel is None!")
-
-        print(f"🎯 Текущий виджет в stacked_widget: {self.stacked_widget.currentWidget()}")
+    def load_panel_data(self):
+        """Загрузка данных для текущей панели"""
+        try:
+            if hasattr(self.current_panel, 'load_initial_data'):
+                self.current_panel.load_initial_data()
+        except Exception as e:
+            print(f"Ошибка при загрузке данных панели: {e}")
 
 
     def show_section(self, section):

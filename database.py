@@ -1,9 +1,6 @@
 import os
 import psycopg2
 from psycopg2 import sql
-import os
-import psycopg2
-from psycopg2 import sql
 
 try:
     from dotenv import load_dotenv
@@ -44,18 +41,24 @@ class Database:
         print("Соединение с базой данных закрыто")
 
     def execute_query(self, query, params=None, fetch=True):
-        """Выполнение SQL запроса"""
+        """Выполнение SQL запроса с правильной логикой коммита"""
+        if not self.connection or self.connection.closed:
+            print("Ошибка: нет соединения с базой данных")
+            return False
+
         try:
             self.cursor.execute(query, params or ())
-            if fetch:
-                if query.strip().upper().startswith('SELECT'):
-                    return self.cursor.fetchall()
-                else:
-                    self.connection.commit()
-                    return True
+
+            # Определяем тип запроса
+            query_type = query.strip().upper().split()[0]
+
+            if query_type == 'SELECT':
+                return self.cursor.fetchall() if fetch else True
             else:
+                # Для INSERT/UPDATE/DELETE всегда коммитим
                 self.connection.commit()
                 return True
+
         except Exception as e:
             self.connection.rollback()
             print(f"Ошибка выполнения запроса: {e}")

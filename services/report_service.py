@@ -60,7 +60,6 @@ class ReportService:
 
             print(f"📚 Найдено оценок: {len(grades_data) if grades_data else 0}")
 
-
             # Группируем оценки по семестрам
             semesters = {}
             for grade in grades_data:
@@ -80,7 +79,6 @@ class ReportService:
                 'student_fio': student_data[0][0],
                 'record_book': student_data[0][1],
                 'group': student_data[0][2],
-                'program': student_data[0][3],
                 'current_date': datetime.now().strftime('%d.%m.%Y'),
                 'semesters': []
             }
@@ -95,6 +93,8 @@ class ReportService:
 
         except Exception as e:
             print(f"Ошибка при генерации зачётной книжки: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     @staticmethod
