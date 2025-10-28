@@ -10,7 +10,8 @@ from PyQt6.QtGui import QFont, QColor
 
 from config.settings import Settings
 from database import db
-from utils.helpers import get_file_size
+from user_manager import user_manager
+from utils.helpers import get_file_size, apply_dialog_style
 from widgets.backup_dialog import RestoreThread
 from widgets.report_dialogs import ReportGenerationThread
 from widgets.editors import TeacherEditor, StudentEditor, GradeEditor, ScheduleEditor, DisciplineEditor, StudyPlanEditor
@@ -555,16 +556,48 @@ class AdminPanel(BasePanel):
             user_login = self.users_table.item(row, 1).text()
             user_role = self.users_table.item(row, 2).text()
 
-            # Диалог выбора действия
+            # Создаем диалог с фиксированным размером
             dialog = QDialog(self)
             dialog.setWindowTitle(f"Действия с пользователем: {user_login}")
-            dialog.setFixedSize(350, 300)
+            dialog.setFixedSize(450, 380)  # Увеличиваем размер
 
-            layout = QVBoxLayout()
+            # Главный layout с отступами
+            main_layout = QVBoxLayout()
+            main_layout.setContentsMargins(30, 30, 30, 30)  # Отступы по краям
+            main_layout.setSpacing(15)  # Расстояние между кнопками
 
-            info_label = QLabel(f"Пользователь: {user_login}\nID: {user_id}\nРоль: {user_role}")
-            info_label.setStyleSheet("font-weight: bold; margin-bottom: 20px;")
-            layout.addWidget(info_label)
+            # Информация о пользователе (больше места)
+            info_label = QLabel(f"<b>Пользователь:</b> {user_login}<br>"
+                                f"<b>ID:</b> {user_id}<br>"
+                                f"<b>Роль:</b> {user_role}")
+            info_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
+            info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            main_layout.addWidget(info_label)
+
+            # Кнопки (увеличиваем их размер и отступы)
+            button_style = """
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 15px 25px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    min-width: 350px;
+                    text-align: left;
+                }
+                QPushButton:hover {
+                    background-color: #2980b9;
+                }
+                QPushButton:pressed {
+                    background-color: #21618c;
+                }
+                QPushButton:disabled {
+                    background-color: #bdc3c7;
+                    color: #7f8c8d;
+                }
+            """
 
             edit_login_btn = QPushButton("✏️ Изменить логин")
             edit_password_btn = QPushButton("✏️ Изменить пароль")
@@ -573,6 +606,12 @@ class AdminPanel(BasePanel):
             delete_btn = QPushButton("🗑️ Удалить пользователя")
             cancel_btn = QPushButton("Отмена")
 
+            # Применяем стиль
+            for btn in [edit_login_btn, edit_password_btn, edit_role_btn,
+                        toggle_status_btn, delete_btn, cancel_btn]:
+                btn.setStyleSheet(button_style)
+
+            # Подключаем сигналы
             edit_login_btn.clicked.connect(lambda: self.edit_user_login(user_id, user_login, dialog))
             edit_password_btn.clicked.connect(lambda: self.edit_user_password(user_id, user_login, dialog))
             edit_role_btn.clicked.connect(lambda: self.edit_user_role(user_id, user_login, user_role, dialog))
@@ -580,14 +619,16 @@ class AdminPanel(BasePanel):
             delete_btn.clicked.connect(lambda: self.delete_user(user_id, user_login, dialog))
             cancel_btn.clicked.connect(dialog.reject)
 
-            layout.addWidget(edit_login_btn)
-            layout.addWidget(edit_password_btn)
-            layout.addWidget(edit_role_btn)
-            layout.addWidget(toggle_status_btn)
-            layout.addWidget(delete_btn)
-            layout.addWidget(cancel_btn)
+            # Добавляем кнопки в layout
+            main_layout.addWidget(edit_login_btn)
+            main_layout.addWidget(edit_password_btn)
+            main_layout.addWidget(edit_role_btn)
+            main_layout.addWidget(toggle_status_btn)
+            main_layout.addWidget(delete_btn)
+            main_layout.addStretch()  # Растягиваем пространство
+            main_layout.addWidget(cancel_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
-            dialog.setLayout(layout)
+            dialog.setLayout(main_layout)
             dialog.exec()
 
     def edit_user_login(self, user_id, current_login, parent_dialog):
@@ -1645,29 +1686,37 @@ class DekanatPanel(BasePanel):
         return widget
 
     def load_disciplines(self):
-        """Загрузка дисциплин"""
-        try:
+        role = user_manager.current_user['role']
+        dept_id = user_manager.current_user.get('department_id')
+
+        if role == 'kafedra' and not dept_id:
+            QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
+            return
+
+        if role == 'kafedra':
             query = """
-            SELECT d.id, d.name, dep.name 
-            FROM disciplines d 
-            JOIN departments dep ON d.department_id = dep.id 
+            SELECT d.id, d.name, dep.name
+            FROM disciplines d
+            JOIN departments dep ON d.department_id = dep.id
+            WHERE d.department_id = %s
+            ORDER BY d.name
+            """
+            result = db.execute_query(query, (dept_id,))
+        else:  # admin
+            query = """
+            SELECT d.id, d.name, dep.name
+            FROM disciplines d
+            JOIN departments dep ON d.department_id = dep.id
             ORDER BY d.name
             """
             result = db.execute_query(query)
-            if result:
-                # Добавляем кнопки действий
-                table_data = []
-                for row in result:
-                    table_data.append(row + ("✏️ 🗑️",))
-                self.populate_table(self.disciplines_table, table_data)
-            else:
-                self.disciplines_table.setRowCount(0)
-                self.disciplines_table.setRowCount(1)
-                self.disciplines_table.setItem(0, 0, QTableWidgetItem("Нет данных о дисциплинах"))
-        except Exception as e:
-            print(f"Ошибка при загрузке дисциплин: {e}")
+
+        if result:
+            table_data = [row + ("✏️ 🗑️",) for row in result]
+            self.populate_table(self.disciplines_table, table_data)
+        else:
             self.disciplines_table.setRowCount(1)
-            self.disciplines_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки данных"))
+            self.disciplines_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
 
     def add_discipline(self):
         """Добавление новой дисциплины"""
@@ -1703,11 +1752,49 @@ class DekanatPanel(BasePanel):
             self.load_study_plans()
 
     def on_plan_action(self, row, column):
-        """Обработка действий с учебным планом"""
         if column == 7:  # Колонка "Действия"
-            plan_id = self.plans_table.item(row, 0).text()
-            # Здесь можно добавить логику редактирования учебного плана
-            QMessageBox.information(self, "Информация", f"Редактирование учебного плана ID: {plan_id}")
+            plan_id = int(self.plans_table.item(row, 0).text())
+            discipline_name = self.plans_table.item(row, 1).text()
+            group_name = self.plans_table.item(row, 2).text()
+            teacher_name = self.plans_table.item(row, 3).text()
+            semester = int(self.plans_table.item(row, 4).text())
+            lect = int(self.plans_table.item(row, 5).text())
+            pract = int(self.plans_table.item(row, 6).text())
+
+            # Получаем ID по именам
+            disc_id = self._get_discipline_id_by_name(discipline_name)
+            group_id = self._get_group_id_by_name(group_name)
+            teacher_id = self._get_teacher_id_by_name(teacher_name)
+
+            if disc_id is None or group_id is None:
+                QMessageBox.warning(self, "Ошибка", "Не удалось определить ID сущностей")
+                return
+
+            plan_data = (plan_id, disc_id, group_id, teacher_id, semester, lect, pract)
+
+            # Диалог выбора действия
+            action = QMessageBox.question(
+                self, "Действие",
+                "Выберите действие:\n✅ — Редактировать\n🗑️ — Удалить",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel
+            )
+            if action == QMessageBox.StandardButton.Yes:
+                # Редактировать
+                from widgets.editors import StudyPlanEditor
+                editor = StudyPlanEditor(plan_data=plan_data, parent=self)
+                if editor.exec() == QDialog.DialogCode.Accepted:
+                    self.load_study_plans()
+            elif action == QMessageBox.StandardButton.No:
+                # Удалить
+                reply = QMessageBox.warning(
+                    self, "Подтверждение",
+                    f"Удалить учебный план?\nДисциплина: {discipline_name}\nГруппа: {group_name}",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    db.execute_query("DELETE FROM study_plans WHERE id = %s", (plan_id,), fetch=False)
+                    self.load_study_plans()
 
     def create_study_plans_tab(self):
         """Вкладка управления учебными планами"""
@@ -1800,49 +1887,69 @@ class DekanatPanel(BasePanel):
                 self.group_filter.addItem(group_name, group_id)
 
     def load_students(self):
-        """Загрузка студентов"""
-        try:
-            group_id = self.group_filter.currentData()
+        """
+        Студенты фильтруются по кафедре через связь:
+        student → group → study_program → disciplines (учебный план) → department
+        Но проще: студенты в группах, которые обучаются по дисциплинам кафедры.
+        Однако в текущей схеме нет прямой связи group → department.
+        Поэтому фильтрация студентов по кафедре — косвенная.
 
-            if group_id:
-                query = """
-                SELECT s.id, s.fio, s.record_book_id, g.name, 
-                       CASE WHEN s.status THEN 'Активен' ELSE 'Отчислен' END
-                FROM students s
-                JOIN groups g ON s.group_id = g.id
-                WHERE s.group_id = %s
-                ORDER BY s.fio
-                """
-                params = (group_id,)
-            else:
-                query = """
-                SELECT s.id, s.fio, s.record_book_id, g.name, 
-                       CASE WHEN s.status THEN 'Активен' ELSE 'Отчислен' END
-                FROM students s
-                JOIN groups g ON s.group_id = g.id
-                ORDER BY g.name, s.fio
-                """
-                params = None
+        Вариант: показывать всех студентов, чьи группы есть в учебных планах кафедры.
+        """
+        role = user_manager.current_user['role']
+        dept_id = user_manager.current_user.get('department_id')
 
-            result = db.execute_query(query, params)
-            if result:
-                # Добавляем кнопки действий
-                table_data = []
-                for row in result:
-                    table_data.append(row + ("✏️",))
-                self.populate_table(self.students_table, table_data)
-            else:
-                self.students_table.setRowCount(0)
-                self.students_table.setRowCount(1)
-                self.students_table.setItem(0, 0, QTableWidgetItem("Нет данных о студентах"))
-        except Exception as e:
-            print(f"Ошибка при загрузке студентов: {e}")
+        if role == 'kafedra' and not dept_id:
+            QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
+            return
+
+        if role == 'kafedra':
+            query = """
+            SELECT DISTINCT s.id, s.fio, s.record_book_id, g.name,
+                   CASE WHEN s.status THEN 'Активен' ELSE 'Отчислен' END
+            FROM students s
+            JOIN groups g ON s.group_id = g.id
+            JOIN study_plans sp ON sp.group_id = g.id
+            JOIN disciplines d ON sp.discipline_id = d.id
+            WHERE d.department_id = %s
+            ORDER BY g.name, s.fio
+            """
+            result = db.execute_query(query, (dept_id,))
+        else:  # admin
+            query = """
+            SELECT s.id, s.fio, s.record_book_id, g.name,
+                   CASE WHEN s.status THEN 'Активен' ELSE 'Отчислен' END
+            FROM students s
+            JOIN groups g ON s.group_id = g.id
+            ORDER BY g.name, s.fio
+            """
+            result = db.execute_query(query)
+
+        if result:
+            table_data = [row + ("✏️",) for row in result]
+            self.populate_table(self.students_table, table_data)
+        else:
             self.students_table.setRowCount(1)
-            self.students_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки данных"))
+            self.students_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
 
     def load_teachers(self):
-        """Загрузка преподавателей"""
-        try:
+        role = user_manager.current_user['role']
+        dept_id = user_manager.current_user.get('department_id')
+
+        if role == 'kafedra' and not dept_id:
+            QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
+            return
+
+        if role == 'kafedra':
+            query = """
+            SELECT t.id, t.fio, t.position, t.academic_degree, d.name
+            FROM teachers t
+            JOIN departments d ON t.department_id = d.id
+            WHERE t.department_id = %s
+            ORDER BY t.fio
+            """
+            result = db.execute_query(query, (dept_id,))
+        else:  # admin
             query = """
             SELECT t.id, t.fio, t.position, t.academic_degree, d.name
             FROM teachers t
@@ -1850,20 +1957,13 @@ class DekanatPanel(BasePanel):
             ORDER BY t.fio
             """
             result = db.execute_query(query)
-            if result:
-                # Добавляем кнопки действий
-                table_data = []
-                for row in result:
-                    table_data.append(row + ("✏️ 🗑️",))
-                self.populate_table(self.teachers_table, table_data)
-            else:
-                self.teachers_table.setRowCount(0)
-                self.teachers_table.setRowCount(1)
-                self.teachers_table.setItem(0, 0, QTableWidgetItem("Нет данных о преподавателях"))
-        except Exception as e:
-            print(f"Ошибка при загрузке преподавателей: {e}")
+
+        if result:
+            table_data = [row + ("✏️ 🗑️",) for row in result]
+            self.populate_table(self.teachers_table, table_data)
+        else:
             self.teachers_table.setRowCount(1)
-            self.teachers_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки данных"))
+            self.teachers_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
 
     def add_teacher(self):
         """Добавление нового преподавателя"""
@@ -1902,15 +2002,68 @@ class DekanatPanel(BasePanel):
             self.load_schedule()
 
     def on_schedule_action(self, row, column):
-        """Обработка действий с расписанием"""
         if column == 8:  # Колонка "Действия"
-            schedule_id = self.schedule_table.item(row, 0).text()
-            # Здесь можно добавить логику редактирования расписания
-            QMessageBox.information(self, "Информация", f"Редактирование занятия ID: {schedule_id}")
+            schedule_id = int(self.schedule_table.item(row, 0).text())
+            discipline_name = self.schedule_table.item(row, 1).text()
+            group_name = self.schedule_table.item(row, 2).text()
+            teacher_name = self.schedule_table.item(row, 3).text()
+            classroom_num = self.schedule_table.item(row, 4).text()
+            start_time = self.schedule_table.item(row, 6).text().split('-')[0]
+            end_time = self.schedule_table.item(row, 6).text().split('-')[1]
+            week_type = self.schedule_table.item(row, 7).text()
+
+            disc_id = self._get_discipline_id_by_name(discipline_name)
+            group_id = self._get_group_id_by_name(group_name)
+            teacher_id = self._get_teacher_id_by_name(teacher_name)
+            class_id = self._get_classroom_id_by_number(classroom_num)
+
+            if any(x is None for x in [disc_id, group_id, class_id]):
+                QMessageBox.warning(self, "Ошибка", "Не удалось определить ID сущностей")
+                return
+
+            schedule_data = (schedule_id, disc_id, class_id, teacher_id, group_id, start_time, end_time, week_type)
+
+            action = QMessageBox.question(
+                self, "Действие",
+                "Выберите действие:\n✅ — Редактировать\n🗑️ — Удалить",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel
+            )
+            if action == QMessageBox.StandardButton.Yes:
+                from widgets.editors import ScheduleEditor
+                editor = ScheduleEditor(schedule_data=schedule_data, parent=self)
+                if editor.exec() == QDialog.DialogCode.Accepted:
+                    self.load_schedule()
+            elif action == QMessageBox.StandardButton.No:
+                reply = QMessageBox.warning(
+                    self, "Подтверждение",
+                    f"Удалить занятие?\n{discipline_name}\nГруппа: {group_name}\nАудитория: {classroom_num}",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    db.execute_query("DELETE FROM schedule WHERE id = %s", (schedule_id,), fetch=False)
+                    self.load_schedule()
 
     def load_study_plans(self):
-        """Загрузка учебных планов"""
-        try:
+        role = user_manager.current_user['role']
+        dept_id = user_manager.current_user.get('department_id')
+
+        if role == 'kafedra' and not dept_id:
+            QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
+            return
+
+        if role == 'kafedra':
+            query = """
+            SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
+            FROM study_plans sp
+            JOIN disciplines d ON sp.discipline_id = d.id
+            JOIN groups g ON sp.group_id = g.id
+            LEFT JOIN teachers t ON sp.teacher_id = t.id
+            WHERE d.department_id = %s
+            ORDER BY g.name, sp.semester, d.name
+            """
+            result = db.execute_query(query, (dept_id,))
+        else:  # admin
             query = """
             SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
             FROM study_plans sp
@@ -1920,26 +2073,40 @@ class DekanatPanel(BasePanel):
             ORDER BY g.name, sp.semester, d.name
             """
             result = db.execute_query(query)
-            if result:
-                # Добавляем кнопки действий
-                table_data = []
-                for row in result:
-                    table_data.append(row + ("✏️ 🗑️",))
-                self.populate_table(self.plans_table, table_data)
-            else:
-                self.plans_table.setRowCount(0)
-                self.plans_table.setRowCount(1)
-                self.plans_table.setItem(0, 0, QTableWidgetItem("Нет данных об учебных планах"))
-        except Exception as e:
-            print(f"Ошибка при загрузке учебных планов: {e}")
+
+        if result:
+            table_data = [row + ("✏️ 🗑️",) for row in result]
+            self.populate_table(self.plans_table, table_data)
+        else:
             self.plans_table.setRowCount(1)
-            self.plans_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки данных"))
+            self.plans_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
 
     def load_schedule(self):
-        """Загрузка расписания"""
-        try:
+        role = user_manager.current_user['role']
+        dept_id = user_manager.current_user.get('department_id')
+
+        if role == 'kafedra' and not dept_id:
+            QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
+            return
+
+        if role == 'kafedra':
             query = """
-            SELECT s.id, d.name, g.name, t.fio, c.number, 
+            SELECT s.id, d.name, g.name, t.fio, c.number,
+                   TO_CHAR(s.start_time, 'Day') as day_of_week,
+                   CONCAT(TO_CHAR(s.start_time, 'HH24:MI'), '-', TO_CHAR(s.end_time, 'HH24:MI')) as time_range,
+                   s.week_type
+            FROM schedule s
+            JOIN disciplines d ON s.discipline_id = d.id
+            JOIN groups g ON s.group_id = g.id
+            LEFT JOIN teachers t ON s.teacher_id = t.id
+            JOIN classrooms c ON s.classroom_id = c.id
+            WHERE d.department_id = %s
+            ORDER BY s.start_time, g.name
+            """
+            result = db.execute_query(query, (dept_id,))
+        else:  # admin
+            query = """
+            SELECT s.id, d.name, g.name, t.fio, c.number,
                    TO_CHAR(s.start_time, 'Day') as day_of_week,
                    CONCAT(TO_CHAR(s.start_time, 'HH24:MI'), '-', TO_CHAR(s.end_time, 'HH24:MI')) as time_range,
                    s.week_type
@@ -1951,32 +2118,43 @@ class DekanatPanel(BasePanel):
             ORDER BY s.start_time, g.name
             """
             result = db.execute_query(query)
-            if result:
-                # Добавляем кнопки действий
-                table_data = []
-                for row in result:
-                    # row[0] - id, row[1] - дисциплина, row[2] - группа, row[3] - преподаватель,
-                    # row[4] - аудитория, row[5] - день недели, row[6] - время, row[7] - тип недели
-                    table_data.append((
-                        row[0],  # ID
-                        row[1],  # Дисциплина
-                        row[2],  # Группа
-                        row[3] if row[3] else "Не назначен",  # Преподаватель
-                        row[4],  # Аудитория
-                        row[5].strip(),  # День недели (убираем лишние пробелы)
-                        row[6],  # Время
-                        row[7],  # Тип недели
-                        "✏️ 🗑️"  # Действия
-                    ))
-                self.populate_table(self.schedule_table, table_data)
-            else:
-                self.schedule_table.setRowCount(0)
-                self.schedule_table.setRowCount(1)
-                self.schedule_table.setItem(0, 0, QTableWidgetItem("Нет данных о расписании"))
-        except Exception as e:
-            print(f"Ошибка при загрузке расписания: {e}")
+
+        if result:
+            table_data = []
+            for row in result:
+                table_data.append((
+                    row[0],  # ID
+                    row[1],  # Дисциплина
+                    row[2],  # Группа
+                    row[3] if row[3] else "Не назначен",  # Преподаватель
+                    row[4],  # Аудитория
+                    row[5].strip(),  # День недели
+                    row[6],  # Время
+                    row[7],  # Тип недели
+                    "✏️ 🗑️"
+                ))
+            self.populate_table(self.schedule_table, table_data)
+        else:
             self.schedule_table.setRowCount(1)
-            self.schedule_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки данных"))
+            self.schedule_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
+
+    def _get_discipline_id_by_name(self, name):
+        res = db.execute_query("SELECT id FROM disciplines WHERE name = %s", (name,))
+        return res[0][0] if res else None
+
+    def _get_group_id_by_name(self, name):
+        res = db.execute_query("SELECT id FROM groups WHERE name = %s", (name,))
+        return res[0][0] if res else None
+
+    def _get_teacher_id_by_name(self, name):
+        if name == "Не назначен":
+            return None
+        res = db.execute_query("SELECT id FROM teachers WHERE fio = %s", (name,))
+        return res[0][0] if res else None
+
+    def _get_classroom_id_by_number(self, number):
+        res = db.execute_query("SELECT id FROM classrooms WHERE number = %s", (number,))
+        return res[0][0] if res else None
 
     def create_students_tab(self):
         """Вкладка управления студентами"""

@@ -167,78 +167,87 @@ class BackupService:
 
                 total_rows = 0
 
+                # Внутри цикла по таблицам:
                 for table_name in tables:
                     print(f"🔍 Обрабатываем таблицу: {table_name}")
-
                     try:
-                        # Получаем структуру таблицы
+                        # === 1. Получаем структуру колонок ===
                         structure_query = f"""
                         SELECT column_name, data_type, is_nullable, column_default
                         FROM information_schema.columns 
-                        WHERE table_name = '{table_name}' 
+                        WHERE table_name = %s AND table_schema = 'public'
                         ORDER BY ordinal_position
                         """
+                        structure = db.execute_query(structure_query, (table_name,))
 
-                        structure = db.execute_query(structure_query)
                         if not structure:
                             print(f"⚠️ Не удалось получить структуру таблицы {table_name}")
                             continue
 
-                        # Получаем данные таблицы
+                        # === 2. Получаем PRIMARY KEY ===
+                        pk_query = """
+                        SELECT kcu.column_name
+                        FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu
+                          ON tc.constraint_name = kcu.constraint_name
+                         AND tc.table_schema = kcu.table_schema
+                        WHERE tc.constraint_type = 'PRIMARY KEY'
+                          AND tc.table_name = %s
+                          AND tc.table_schema = 'public'
+                        ORDER BY kcu.ordinal_position
+                        """
+                        pk_result = db.execute_query(pk_query, (table_name,))
+                        primary_keys = [row[0] for row in pk_result] if pk_result else []
+
+                        # === 3. Получаем данные таблицы ===
                         data_query = f'SELECT * FROM "{table_name}"'
                         table_data = db.execute_query(data_query)
-
                         if table_data is None:
-                            print(f"⚠️ Ошибка чтения данных таблицы {table_name}")
                             f.write(f"\n-- Ошибка чтения таблицы: {table_name}\n")
                             continue
 
-                        # Записываем структуру таблицы
+                        # === 4. Записываем DROP и CREATE TABLE ===
                         f.write(f"\n-- ============================================\n")
                         f.write(f"-- ТАБЛИЦА: {table_name}\n")
                         f.write(f"-- ============================================\n")
-
-                        # Создаем DROP TABLE если существует
-                        f.write(f"DROP TABLE IF EXISTS \"{table_name}\" CASCADE;\n\n")
-
-                        # Создаем CREATE TABLE
-                        f.write(f"CREATE TABLE \"{table_name}\" (\n")
+                        f.write(f'DROP TABLE IF EXISTS "{table_name}" CASCADE;\n')
+                        f.write(f'CREATE TABLE "{table_name}" (\n')
 
                         columns_def = []
                         for col in structure:
                             col_name, data_type, is_nullable, col_default = col
-
-                            # Форматируем тип данных
+                            # Приведение типов
                             if 'character' in data_type:
                                 data_type = 'TEXT'
                             elif 'timestamp' in data_type:
                                 data_type = 'TIMESTAMP'
                             elif 'boolean' in data_type:
                                 data_type = 'BOOLEAN'
+                            elif 'integer' in data_type:
+                                data_type = 'INTEGER'
 
-                            col_def = f"    \"{col_name}\" {data_type}"
-
+                            col_def = f'    "{col_name}" {data_type}'
                             if is_nullable == 'NO':
                                 col_def += " NOT NULL"
-
                             if col_default:
                                 col_def += f" DEFAULT {col_default}"
-
                             columns_def.append(col_def)
 
                         f.write(',\n'.join(columns_def))
-                        f.write("\n);\n\n")
 
-                        # Записываем данные
+                        # Добавляем PRIMARY KEY, если есть
+                        if primary_keys:
+                            pk_cols = ', '.join([f'"{col}"' for col in primary_keys])
+                            f.write(f',\n    CONSTRAINT "{table_name}_pkey" PRIMARY KEY ({pk_cols})')
+
+                        f.write("\n);\n")
+
+                        # === 5. Вставляем данные ===
                         if table_data:
-                            f.write(f"-- Данные таблицы {table_name} ({len(table_data)} записей)\n")
-
-                            # Получаем названия колонок
                             col_names = [col[0] for col in structure]
-
+                            f.write(f"-- Данные таблицы {table_name} ({len(table_data)} записей)\n")
                             f.write(
-                                f"INSERT INTO \"{table_name}\" ({', '.join(['\"' + col + '\"' for col in col_names])}) VALUES\n")
-
+                                f'INSERT INTO "{table_name}" ({", ".join([f"\"{c}\"" for c in col_names])}) VALUES\n')
                             rows = []
                             for row in table_data:
                                 formatted_values = []
@@ -246,7 +255,6 @@ class BackupService:
                                     if value is None:
                                         formatted_values.append("NULL")
                                     elif isinstance(value, str):
-                                        # Экранируем кавычки и переносы строк
                                         escaped_value = value.replace("'", "''").replace("\n", "\\n").replace("\r",
                                                                                                               "\\r")
                                         formatted_values.append(f"'{escaped_value}'")
@@ -256,23 +264,26 @@ class BackupService:
                                         formatted_values.append("TRUE" if value else "FALSE")
                                     else:
                                         formatted_values.append(str(value))
-
                                 rows.append(f"({', '.join(formatted_values)})")
+                            f.write(',\n'.join(rows))
+                            f.write(";\n")
 
-                            # Разбиваем на группы по 100 записей для читаемости
-                            for i in range(0, len(rows), 100):
-                                chunk = rows[i:i + 100]
-                                f.write(',\n'.join(chunk))
-                                if i + 100 < len(rows):
-                                    f.write(",\n")
-                                else:
-                                    f.write(";\n\n")
-
-                            total_rows += len(table_data)
-                            print(f"✅ Таблица {table_name}: {len(table_data)} записей")
+                            # === 6. Сбрасываем последовательность (если есть SERIAL-поле) ===
+                            # Ищем колонку с именем *_id и DEFAULT nextval(...)
+                            for col in structure:
+                                col_name, _, _, col_default = col
+                                if col_name == 'id' or col_name.endswith('_id'):
+                                    if col_default and 'nextval' in col_default:
+                                        # Извлекаем имя последовательности из col_default, например: nextval('teachers_id_seq'::regclass)
+                                        import re
+                                        seq_match = re.search(r"nextval\('([^']+)'", col_default)
+                                        if seq_match:
+                                            seq_name = seq_match.group(1)
+                                            f.write(
+                                                f"SELECT setval('{seq_name}', (SELECT MAX({col_name}) FROM \"{table_name}\"));\n")
+                                            break
                         else:
-                            f.write(f"-- Таблица {table_name} пуста\n\n")
-                            print(f"ℹ️ Таблица {table_name}: пустая")
+                            f.write(f"-- Таблица {table_name} пуста\n")
 
                     except Exception as e:
                         print(f"⚠️ Ошибка при обработке таблицы {table_name}: {e}")

@@ -7,6 +7,7 @@ import subprocess
 import platform
 from database import db
 from services.report_service import DocumentGenerator
+from utils.helpers import apply_dialog_style
 
 
 class ReportGenerationThread(QThread):

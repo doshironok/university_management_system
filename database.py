@@ -65,10 +65,9 @@ class Database:
             return False
 
     def get_user_by_login(self, login):
-        """Получение пользователя по логину"""
         query = """
         SELECT u.id, u.login, u.password_hash, u.role, 
-               u.teacher_id, u.student_id,
+               u.teacher_id, u.student_id, u.department_id,
                t.fio as teacher_fio, s.fio as student_fio,
                t.id as teacher_db_id, s.id as student_db_id
         FROM users u

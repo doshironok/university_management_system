@@ -53,3 +53,39 @@ def get_file_size(file_path):
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.1f} TB"
+
+def apply_dialog_style(dialog):
+    dialog.setStyleSheet("""
+        QDialog {
+            background-color: #f5f5f5;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        QFrame#dialog_frame {
+            background-color: white;
+            border-radius: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        QLineEdit, QComboBox, QDateEdit {
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            background-color: #fafafa;
+        }
+        QLineEdit:focus, QComboBox:focus {
+            border-color: #3498db;
+            background-color: white;
+        }
+        QPushButton {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        QPushButton:hover { background-color: #2980b9; }
+        QPushButton:pressed { background-color: #21618c; }
+        QLabel { color: #2c3e50; font-size: 14px; }
+    """)

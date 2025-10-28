@@ -44,14 +44,15 @@ class UserManager:
         self.current_user = {
             'id': user_data[0],
             'login': user_data[1],
-            'role': role,  # Важно: используем роль из БД
+            'role': role,
             'teacher_id': user_data[4],
             'student_id': user_data[5],
-            'teacher_db_id': user_data[8] if len(user_data) > 8 else None,
-            'student_db_id': user_data[9] if len(user_data) > 9 else None,
-            'teacher_fio': user_data[6] if len(user_data) > 6 else None,
-            'student_fio': user_data[7] if len(user_data) > 7 else None,
-            'fio': (user_data[6] or user_data[7] or 'Администратор') if len(user_data) > 7 else 'Пользователь'
+            'department_id': user_data[6],
+            'teacher_fio': user_data[7] if len(user_data) > 7 else None,
+            'student_fio': user_data[8] if len(user_data) > 8 else None,
+            'teacher_db_id': user_data[9] if len(user_data) > 9 else None,
+            'student_db_id': user_data[10] if len(user_data) > 10 else None,
+            'fio': (user_data[7] or user_data[8] or 'Администратор') if len(user_data) > 8 else 'Пользователь'
         }
 
         print(f"✅ Успешная аутентификация: {self.current_user}")

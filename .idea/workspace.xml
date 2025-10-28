@@ -6,8 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/widgets/editors.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/editors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/widgets/role_panels.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -125,7 +123,15 @@
       <option name="project" value="LOCAL" />
       <updated>1761585980259</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="Обновлён интерфейс, добавлены функции для кафедры, преподавателей. &#10;&#10;Необходимо сделать обработку ошибок для кафедры при редактировании записей в разных таблицах, а также отображения данных в таблицах с дисциплинами, расписанием и преподавателями">
+      <option name="closed" value="true" />
+      <created>1761586555094</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1761586555094</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

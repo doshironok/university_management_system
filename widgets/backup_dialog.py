@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QListWidget, QListWidgetItem,
-                             QMessageBox, QProgressDialog, QSplitter)
+                             QMessageBox, QProgressDialog, QSplitter, QFrame)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from services.backup_service import BackupService
-from utils.helpers import get_file_size
+from utils.helpers import get_file_size, apply_dialog_style
 
 
 class BackupThread(QThread):
@@ -42,35 +42,75 @@ class RestoreThread(QThread):
 
 class BackupDialog(QDialog):
     """Диалог управления резервными копиями"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)  #
         self.setup_ui()
         self.load_backups()
 
     def setup_ui(self):
         self.setWindowTitle("Управление резервными копиями БД")
-        self.setFixedSize(600, 400)
+        self.setFixedSize(650, 450)  # ← увеличен размер
 
-        layout = QVBoxLayout()
+        # Главный layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Фрейм-обёртка
+        frame = QFrame()
+        frame.setObjectName("dialog_frame")
+        frame_layout = QVBoxLayout()
+        frame_layout.setContentsMargins(40, 40, 40, 40)
 
         # Заголовок
         title_label = QLabel("Резервные копии базы данных")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title_label)
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 15px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(title_label)
 
         # Список бэкапов
         self.backup_list = QListWidget()
+        self.backup_list.setStyleSheet("""
+            QListWidget {
+                border: 2px solid #ecf0f1;
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 13px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            QListWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
         self.backup_list.itemDoubleClicked.connect(self.on_backup_selected)
-        layout.addWidget(self.backup_list)
+        frame_layout.addWidget(self.backup_list)
 
         # Кнопки управления
         button_layout = QHBoxLayout()
-
         create_btn = QPushButton("Создать резервную копию")
         restore_btn = QPushButton("Восстановить из выбранной")
         delete_btn = QPushButton("Удалить выбранную")
         close_btn = QPushButton("Закрыть")
+
+        for btn in [create_btn, restore_btn, delete_btn, close_btn]:
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 10px 15px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    min-width: 140px;
+                }
+                QPushButton:hover { background-color: #2980b9; }
+                QPushButton:pressed { background-color: #21618c; }
+            """)
 
         create_btn.clicked.connect(self.create_backup)
         restore_btn.clicked.connect(self.restore_backup)
@@ -83,9 +123,10 @@ class BackupDialog(QDialog):
         button_layout.addStretch()
         button_layout.addWidget(close_btn)
 
-        layout.addLayout(button_layout)
-
-        self.setLayout(layout)
+        frame_layout.addLayout(button_layout)
+        frame.setLayout(frame_layout)
+        main_layout.addWidget(frame)
+        self.setLayout(main_layout)
 
     def load_backups(self):
         """Загрузка списка резервных копий"""

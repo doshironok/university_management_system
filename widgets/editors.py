@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, QDate
 from database import db
 from services.data_service import DataService
+from utils.helpers import apply_dialog_style
 
 
 class StudentEditor(QDialog):
@@ -13,6 +14,7 @@ class StudentEditor(QDialog):
 
     def __init__(self, student_data=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.student_data = student_data
         self.setup_ui()
         self.load_groups()
@@ -121,6 +123,7 @@ class GradeEditor(QDialog):
 
     def __init__(self, student_data, study_plan_id, existing_grade=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.student_data = student_data
         self.study_plan_id = study_plan_id
         self.existing_grade = existing_grade
@@ -212,64 +215,68 @@ class GradeEditor(QDialog):
 
 
 class ScheduleEditor(QDialog):
-    """Диалог добавления занятия в расписание"""
-
-    def __init__(self, parent=None):
+    def __init__(self, schedule_data=None, parent=None):
         super().__init__(parent)
+        self.schedule_data = schedule_data  # (id, discipline_id, classroom_id, teacher_id, group_id, start, end, week_type)
         self.setup_ui()
         self.load_initial_data()
+        if self.schedule_data:
+            self.setWindowTitle("Редактирование занятия")
+            self.populate_from_data()
+
+    def populate_from_data(self):
+        _, disc_id, class_id, teacher_id, group_id, start, end, week_type = self.schedule_data
+        self.discipline_combo.setCurrentIndex(self.discipline_combo.findData(disc_id))
+        self.classroom_combo.setCurrentIndex(self.classroom_combo.findData(class_id))
+        self.teacher_combo.setCurrentIndex(self.teacher_combo.findData(teacher_id))
+        self.group_combo.setCurrentIndex(self.group_combo.findData(group_id))
+        self.start_time_edit.setText(start)
+        self.end_time_edit.setText(end)
+        idx = self.week_type_combo.findText(week_type)
+        if idx >= 0:
+            self.week_type_combo.setCurrentIndex(idx)
 
     def setup_ui(self):
         self.setWindowTitle("Добавление занятия в расписание")
         self.setFixedSize(500, 400)
-
         layout = QFormLayout()
-
         # Выпадающие списки
         self.discipline_combo = QComboBox()
         self.classroom_combo = QComboBox()
         self.teacher_combo = QComboBox()
         self.group_combo = QComboBox()
-
         # Поля времени
         time_layout = QHBoxLayout()
         self.start_time_edit = QLineEdit()
         self.start_time_edit.setPlaceholderText("09:00")
         self.end_time_edit = QLineEdit()
         self.end_time_edit.setPlaceholderText("10:30")
-
         time_layout.addWidget(QLabel("С:"))
         time_layout.addWidget(self.start_time_edit)
         time_layout.addWidget(QLabel("До:"))
         time_layout.addWidget(self.end_time_edit)
-
         # Тип недели
         self.week_type_combo = QComboBox()
         self.week_type_combo.addItems(["каждую", "чётная", "нечётная"])
-
         layout.addRow("Дисциплина:", self.discipline_combo)
         layout.addRow("Аудитория:", self.classroom_combo)
         layout.addRow("Преподаватель:", self.teacher_combo)
         layout.addRow("Группа:", self.group_combo)
         layout.addRow("Время:", time_layout)
         layout.addRow("Тип недели:", self.week_type_combo)
-
         # Кнопки
         button_layout = QHBoxLayout()
-        save_btn = QPushButton("Добавить")
-        cancel_btn = QPushButton("Отмена")
+        save_btn = QPushButton("Сохранить")
+        delete_btn = QPushButton("Удалить")  # ← НОВАЯ КНОПКА
         check_btn = QPushButton("Проверить доступность")
-
         save_btn.clicked.connect(self.save_schedule)
-        cancel_btn.clicked.connect(self.reject)
+        delete_btn.clicked.connect(self.delete_schedule)  # ← Связь с новым методом
         check_btn.clicked.connect(self.check_availability)
-
         button_layout.addWidget(save_btn)
+        button_layout.addWidget(delete_btn)  # ← Добавляем рядом с сохранить
         button_layout.addWidget(check_btn)
-        button_layout.addWidget(cancel_btn)
-
+        button_layout.addWidget(QPushButton("Отмена"))  # Отмена без связи — просто закрыть
         layout.addRow(button_layout)
-
         self.setLayout(layout)
 
     def load_initial_data(self):
@@ -278,17 +285,14 @@ class ScheduleEditor(QDialog):
         disciplines = db.execute_query("SELECT id, name FROM disciplines ORDER BY name")
         for disc_id, disc_name in disciplines:
             self.discipline_combo.addItem(disc_name, disc_id)
-
         # Загрузка аудиторий
         classrooms = db.execute_query("SELECT id, number FROM classrooms ORDER BY number")
         for class_id, class_num in classrooms:
             self.classroom_combo.addItem(class_num, class_id)
-
         # Загрузка преподавателей
         teachers = db.execute_query("SELECT id, fio FROM teachers ORDER BY fio")
         for teacher_id, teacher_fio in teachers:
             self.teacher_combo.addItem(teacher_fio, teacher_id)
-
         # Загрузка групп
         groups = db.execute_query("SELECT id, name FROM groups ORDER BY name")
         for group_id, group_name in groups:
@@ -300,21 +304,17 @@ class ScheduleEditor(QDialog):
         start_time = self.start_time_edit.text()
         end_time = self.end_time_edit.text()
         week_type = self.week_type_combo.currentText()
-
         if not all([classroom_id, start_time, end_time]):
             QMessageBox.warning(self, "Ошибка", "Заполните время и выберите аудиторию")
             return
-
         try:
             is_available = DataService.check_classroom_availability(
                 classroom_id, start_time, end_time, week_type
             )
-
             if is_available:
                 QMessageBox.information(self, "Проверка", "Аудитория свободна в указанное время")
             else:
                 QMessageBox.warning(self, "Проверка", "Аудитория занята в указанное время")
-
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при проверке: {str(e)}")
 
@@ -327,26 +327,64 @@ class ScheduleEditor(QDialog):
         start_time = self.start_time_edit.text()
         end_time = self.end_time_edit.text()
         week_type = self.week_type_combo.currentText()
-
         if not all([discipline_id, classroom_id, teacher_id, group_id, start_time, end_time]):
             QMessageBox.warning(self, "Ошибка", "Заполните все поля")
             return
-
         try:
-            # Используем хранимую процедуру БД
-            success = DataService.add_schedule_entry(
-                discipline_id, classroom_id, teacher_id, group_id,
-                start_time, end_time, week_type
-            )
+            if self.schedule_data:
+                # Обновление
+                query = """
+                UPDATE schedule 
+                SET discipline_id = %s, classroom_id = %s, teacher_id = %s,
+                    group_id = %s, start_time = %s, end_time = %s, week_type = %s
+                WHERE id = %s
+                """
+                params = (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type, self.schedule_data[0])
+                success = db.execute_query(query, params, fetch=False)
+                message = "Занятие обновлено"
+            else:
+                # Добавление
+                query = """
+                INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+                params = (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type)
+                success = db.execute_query(query, params, fetch=False)
+                message = "Занятие добавлено"
 
             if success:
-                QMessageBox.information(self, "Успех", "Занятие добавлено в расписание")
+                QMessageBox.information(self, "Успех", message)
                 self.accept()
             else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось добавить занятие")
-
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить занятие")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
+
+    def delete_schedule(self):
+        """Удаление занятия из расписания"""
+        if not self.schedule_data:
+            QMessageBox.warning(self, "Ошибка", "Нет данных для удаления")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение удаления",
+            f"Вы уверены, что хотите удалить занятие?\n"
+            f"Дисциплина: {self.discipline_combo.currentText()}\n"
+            f"Группа: {self.group_combo.currentText()}\n"
+            f"Время: {self.start_time_edit.text()} - {self.end_time_edit.text()}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                query = "DELETE FROM schedule WHERE id = %s"
+                success = db.execute_query(query, (self.schedule_data[0],), fetch=False)
+                if success:
+                    QMessageBox.information(self, "Успех", "Занятие удалено")
+                    self.accept()
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить занятие")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении: {str(e)}")
 
 
 class DisciplineEditor(QDialog):
@@ -354,6 +392,7 @@ class DisciplineEditor(QDialog):
 
     def __init__(self, discipline_data=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.discipline_data = discipline_data
         self.setup_ui()
 
@@ -429,55 +468,62 @@ class DisciplineEditor(QDialog):
 
 
 class StudyPlanEditor(QDialog):
-    """Редактор учебных планов"""
-
-    def __init__(self, parent=None):
+    def __init__(self, plan_data=None, parent=None):
         super().__init__(parent)
+        self.plan_data = plan_data  # (id, discipline_id, group_id, teacher_id, semester, lecture, practice)
         self.setup_ui()
+        self.load_combobox_data()
+        if self.plan_data:
+            self.setWindowTitle("Редактирование учебного плана")
+            self.populate_from_data()
+
+    def populate_from_data(self):
+        """Заполнить форму данными при редактировании"""
+        _, disc_id, group_id, teacher_id, sem, lect, pract = self.plan_data
+        self.discipline_combo.setCurrentIndex(self.discipline_combo.findData(disc_id))
+        self.group_combo.setCurrentIndex(self.group_combo.findData(group_id))
+        self.teacher_combo.setCurrentIndex(self.teacher_combo.findData(teacher_id))
+        self.semester_spin.setValue(sem)
+        self.lecture_hours_spin.setValue(lect)
+        self.practice_hours_spin.setValue(pract)
 
     def setup_ui(self):
         self.setWindowTitle("Добавление учебного плана")
         self.setFixedSize(500, 400)
-
         layout = QVBoxLayout()
         form_layout = QFormLayout()
-
+        # Поля формы
         self.discipline_combo = QComboBox()
         self.group_combo = QComboBox()
         self.teacher_combo = QComboBox()
         self.semester_spin = QSpinBox()
         self.lecture_hours_spin = QSpinBox()
         self.practice_hours_spin = QSpinBox()
-
         # Настройка спинбоксов
         self.semester_spin.setRange(1, 12)
         self.lecture_hours_spin.setRange(0, 200)
         self.practice_hours_spin.setRange(0, 200)
-
-        # Заполняем комбобоксы
+        # Загрузка данных
         self.load_combobox_data()
-
         form_layout.addRow("Дисциплина:", self.discipline_combo)
         form_layout.addRow("Группа:", self.group_combo)
         form_layout.addRow("Преподаватель:", self.teacher_combo)
         form_layout.addRow("Семестр:", self.semester_spin)
         form_layout.addRow("Лекционные часы:", self.lecture_hours_spin)
         form_layout.addRow("Практические часы:", self.practice_hours_spin)
-
         # Кнопки
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Сохранить")
+        delete_btn = QPushButton("Удалить")  # ← НОВАЯ КНОПКА
         cancel_btn = QPushButton("Отмена")
-
         save_btn.clicked.connect(self.save_plan)
+        delete_btn.clicked.connect(self.delete_plan)  # ← Связь с новым методом
         cancel_btn.clicked.connect(self.reject)
-
         button_layout.addWidget(save_btn)
+        button_layout.addWidget(delete_btn)  # ← Добавляем рядом с сохранить
         button_layout.addWidget(cancel_btn)
-
         layout.addLayout(form_layout)
         layout.addLayout(button_layout)
-
         self.setLayout(layout)
 
     def load_combobox_data(self):
@@ -487,13 +533,11 @@ class StudyPlanEditor(QDialog):
         if disciplines:
             for disc_id, disc_name in disciplines:
                 self.discipline_combo.addItem(disc_name, disc_id)
-
         # Группы
         groups = db.execute_query("SELECT id, name FROM groups ORDER BY name")
         if groups:
             for group_id, group_name in groups:
                 self.group_combo.addItem(group_name, group_id)
-
         # Преподаватели
         teachers = db.execute_query("SELECT id, fio FROM teachers ORDER BY fio")
         if teachers:
@@ -501,40 +545,77 @@ class StudyPlanEditor(QDialog):
                 self.teacher_combo.addItem(teacher_fio, teacher_id)
 
     def save_plan(self):
+        """Сохранение учебного плана"""
         discipline_id = self.discipline_combo.currentData()
         group_id = self.group_combo.currentData()
         teacher_id = self.teacher_combo.currentData()
         semester = self.semester_spin.value()
         lecture_hours = self.lecture_hours_spin.value()
         practice_hours = self.practice_hours_spin.value()
-
         if not all([discipline_id, group_id, teacher_id]):
             QMessageBox.warning(self, "Ошибка", "Заполните все поля")
             return
-
         try:
-            query = """
-            INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            success = db.execute_query(query,
-                                       (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours),
-                                       fetch=False)
+            if self.plan_data:
+                # Обновление
+                query = """
+                UPDATE study_plans 
+                SET discipline_id = %s, group_id = %s, teacher_id = %s, 
+                    semester = %s, hours_lecture = %s, hours_practice = %s
+                WHERE id = %s
+                """
+                params = (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours, self.plan_data[0])
+                success = db.execute_query(query, params, fetch=False)
+                message = "Учебный план обновлён"
+            else:
+                # Добавление
+                query = """
+                INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                params = (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours)
+                success = db.execute_query(query, params, fetch=False)
+                message = "Учебный план добавлен"
 
             if success:
-                QMessageBox.information(self, "Успех", "Учебный план добавлен")
+                QMessageBox.information(self, "Успех", message)
                 self.accept()
             else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось добавить учебный план")
-
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить учебный план")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
+
+    def delete_plan(self):
+        """Удаление учебного плана"""
+        if not self.plan_data:
+            QMessageBox.warning(self, "Ошибка", "Нет данных для удаления")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение удаления",
+            f"Вы уверены, что хотите удалить учебный план?\n"
+            f"Дисциплина: {self.discipline_combo.currentText()}\n"
+            f"Группа: {self.group_combo.currentText()}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                query = "DELETE FROM study_plans WHERE id = %s"
+                success = db.execute_query(query, (self.plan_data[0],), fetch=False)
+                if success:
+                    QMessageBox.information(self, "Успех", "Учебный план удалён")
+                    self.accept()
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить учебный план")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении: {str(e)}")
 
 class TeacherEditor(QDialog):
     """Диалог редактирования преподавателя"""
 
     def __init__(self, teacher_data=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.teacher_data = teacher_data
         self.setup_ui()
         self.load_departments()
