@@ -178,6 +178,7 @@ class AdminPanel(BasePanel):
 
     def __init__(self):
         super().__init__()
+        apply_dialog_style(self)
 
     def setup_ui(self):
         super().setup_ui()
@@ -556,48 +557,21 @@ class AdminPanel(BasePanel):
             user_login = self.users_table.item(row, 1).text()
             user_role = self.users_table.item(row, 2).text()
 
-            # Создаем диалог с фиксированным размером
             dialog = QDialog(self)
             dialog.setWindowTitle(f"Действия с пользователем: {user_login}")
-            dialog.setFixedSize(450, 380)  # Увеличиваем размер
+            dialog.setFixedSize(500, 400)  # ← Увеличили размер
 
-            # Главный layout с отступами
-            main_layout = QVBoxLayout()
-            main_layout.setContentsMargins(30, 30, 30, 30)  # Отступы по краям
-            main_layout.setSpacing(15)  # Расстояние между кнопками
+            layout = QVBoxLayout()
+            layout.setContentsMargins(30, 30, 30, 30)  # ← Отступы
+            layout.setSpacing(15)  # ← Отступы между элементами
 
-            # Информация о пользователе (больше места)
-            info_label = QLabel(f"<b>Пользователь:</b> {user_login}<br>"
-                                f"<b>ID:</b> {user_id}<br>"
-                                f"<b>Роль:</b> {user_role}")
-            info_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
-            info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            main_layout.addWidget(info_label)
+            info_label = QLabel(f"Пользователь: {user_login}\nID: {user_id}\nРоль: {user_role}")
+            info_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 20px;")
+            layout.addWidget(info_label)
 
-            # Кнопки (увеличиваем их размер и отступы)
-            button_style = """
-                QPushButton {
-                    background-color: #3498db;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 15px 25px;
-                    font-size: 14px;
-                    font-weight: bold;
-                    min-width: 350px;
-                    text-align: left;
-                }
-                QPushButton:hover {
-                    background-color: #2980b9;
-                }
-                QPushButton:pressed {
-                    background-color: #21618c;
-                }
-                QPushButton:disabled {
-                    background-color: #bdc3c7;
-                    color: #7f8c8d;
-                }
-            """
+            # Создаем группу кнопок
+            buttons_layout = QVBoxLayout()
+            buttons_layout.setSpacing(10)
 
             edit_login_btn = QPushButton("✏️ Изменить логин")
             edit_password_btn = QPushButton("✏️ Изменить пароль")
@@ -606,12 +580,25 @@ class AdminPanel(BasePanel):
             delete_btn = QPushButton("🗑️ Удалить пользователя")
             cancel_btn = QPushButton("Отмена")
 
-            # Применяем стиль
             for btn in [edit_login_btn, edit_password_btn, edit_role_btn,
                         toggle_status_btn, delete_btn, cancel_btn]:
-                btn.setStyleSheet(button_style)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #3498db;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 12px 20px;
+                        font-size: 13px;
+                        font-weight: bold;
+                        min-width: 200px;
+                        text-align: left;
+                    }
+                    QPushButton:hover { background-color: #2980b9; }
+                    QPushButton:pressed { background-color: #21618c; }
+                """)
+                btn.setMinimumHeight(40)
 
-            # Подключаем сигналы
             edit_login_btn.clicked.connect(lambda: self.edit_user_login(user_id, user_login, dialog))
             edit_password_btn.clicked.connect(lambda: self.edit_user_password(user_id, user_login, dialog))
             edit_role_btn.clicked.connect(lambda: self.edit_user_role(user_id, user_login, user_role, dialog))
@@ -619,16 +606,15 @@ class AdminPanel(BasePanel):
             delete_btn.clicked.connect(lambda: self.delete_user(user_id, user_login, dialog))
             cancel_btn.clicked.connect(dialog.reject)
 
-            # Добавляем кнопки в layout
-            main_layout.addWidget(edit_login_btn)
-            main_layout.addWidget(edit_password_btn)
-            main_layout.addWidget(edit_role_btn)
-            main_layout.addWidget(toggle_status_btn)
-            main_layout.addWidget(delete_btn)
-            main_layout.addStretch()  # Растягиваем пространство
-            main_layout.addWidget(cancel_btn, alignment=Qt.AlignmentFlag.AlignRight)
+            buttons_layout.addWidget(edit_login_btn)
+            buttons_layout.addWidget(edit_password_btn)
+            buttons_layout.addWidget(edit_role_btn)
+            buttons_layout.addWidget(toggle_status_btn)
+            buttons_layout.addWidget(delete_btn)
+            buttons_layout.addWidget(cancel_btn)
 
-            dialog.setLayout(main_layout)
+            layout.addLayout(buttons_layout)
+            dialog.setLayout(layout)
             dialog.exec()
 
     def edit_user_login(self, user_id, current_login, parent_dialog):
@@ -995,22 +981,45 @@ class AdminPanel(BasePanel):
         if column == 3:  # Колонка "Действия"
             department_id = self.departments_table.item(row, 0).text()
             department_name = self.departments_table.item(row, 1).text()
-
             # Диалог выбора действия
             dialog = QDialog(self)
             dialog.setWindowTitle(f"Действия с кафедрой: {department_name}")
-            dialog.setFixedSize(300, 200)
+            dialog.setFixedSize(450, 300)  # ← Увеличили размер
 
-            layout = QVBoxLayout()
+            main_layout = QVBoxLayout()
+            main_layout.setContentsMargins(30, 30, 30, 30)
+            main_layout.setSpacing(15)
 
+            # Заголовок
             info_label = QLabel(f"Кафедра: {department_name}\nID: {department_id}")
-            info_label.setStyleSheet("font-weight: bold; margin-bottom: 20px;")
-            layout.addWidget(info_label)
+            info_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 20px;")
+            main_layout.addWidget(info_label)
+
+            # Кнопки
+            button_style = """
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 12px 20px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    min-width: 350px;
+                    text-align: left;
+                }
+                QPushButton:hover { background-color: #2980b9; }
+                QPushButton:pressed { background-color: #21618c; }
+            """
 
             edit_name_btn = QPushButton("✏️ Изменить название")
             edit_short_btn = QPushButton("✏️ Изменить сокращение")
             delete_btn = QPushButton("🗑️ Удалить кафедру")
             cancel_btn = QPushButton("Отмена")
+
+            for btn in [edit_name_btn, edit_short_btn, delete_btn, cancel_btn]:
+                btn.setStyleSheet(button_style)
+                btn.setMinimumHeight(40)
 
             edit_name_btn.clicked.connect(lambda: self.edit_department_name(department_id, department_name, dialog))
             edit_short_btn.clicked.connect(
@@ -1018,12 +1027,13 @@ class AdminPanel(BasePanel):
             delete_btn.clicked.connect(lambda: self.delete_department(department_id, department_name, dialog))
             cancel_btn.clicked.connect(dialog.reject)
 
-            layout.addWidget(edit_name_btn)
-            layout.addWidget(edit_short_btn)
-            layout.addWidget(delete_btn)
-            layout.addWidget(cancel_btn)
+            main_layout.addWidget(edit_name_btn)
+            main_layout.addWidget(edit_short_btn)
+            main_layout.addWidget(delete_btn)
+            main_layout.addStretch()  # ← растягиваем пространство
+            main_layout.addWidget(cancel_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
-            dialog.setLayout(layout)
+            dialog.setLayout(main_layout)
             dialog.exec()
 
     def edit_department_name(self, department_id, current_name, parent_dialog):

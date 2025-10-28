@@ -132,13 +132,26 @@ class BackupService:
 
             print(f"💾 Создаем файл: {backup_file}")
 
-            # Получаем ВСЕ таблицы из базы данных
+            # Получаем таблицы из базы данных
             tables_query = """
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY 
+              CASE tablename
+                WHEN 'departments' THEN 1
+                WHEN 'study_programs' THEN 2
+                WHEN 'groups' THEN 3
+                WHEN 'teachers' THEN 4
+                WHEN 'students' THEN 5
+                WHEN 'disciplines' THEN 6
+                WHEN 'study_plans' THEN 7   -- ← ДО grades!
+                WHEN 'classrooms' THEN 8
+                WHEN 'schedule' THEN 9
+                WHEN 'grades' THEN 10       -- ← После study_plans
+                WHEN 'users' THEN 11
+                ELSE 99
+              END
             """
 
             tables_result = db.execute_query(tables_query)
@@ -259,7 +272,11 @@ class BackupService:
                                                                                                               "\\r")
                                         formatted_values.append(f"'{escaped_value}'")
                                     elif isinstance(value, datetime):
-                                        formatted_values.append(f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'")
+                                        # Для даты без времени — только дата в формате 'YYYY-MM-DD'
+                                        if value.time().hour == 0 and value.time().minute == 0 and value.time().second == 0:
+                                            formatted_values.append(f"'{value.strftime('%Y-%m-%d')}'")
+                                        else:
+                                            formatted_values.append(f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'")
                                     elif isinstance(value, bool):
                                         formatted_values.append("TRUE" if value else "FALSE")
                                     else:
@@ -466,74 +483,40 @@ class BackupService:
 
     @staticmethod
     def _restore_with_sql_script(backup_file):
-        """Восстановление через выполнение SQL скрипта"""
+        """Восстановление через выполнение SQL скрипта в ОДНОЙ транзакции"""
         try:
-            print("🔍 Восстановление через SQL скрипт...")
+            print("🔍 Восстановление через SQL скрипт в одной транзакции...")
             from database import db
 
-            # Проверяем подключение к БД
             if not db.connect():
                 print("❌ Не удалось подключиться к БД")
                 return False
 
-            # Читаем SQL скрипт
             with open(backup_file, 'r', encoding='utf-8') as f:
                 sql_script = f.read()
 
             print(f"📖 Размер SQL скрипта: {len(sql_script)} символов")
 
-            # Разбиваем скрипт на отдельные команды
-            commands = BackupService._split_sql_commands(sql_script)
-            print(f"📋 Найдено команд: {len(commands)}")
+            # Выполняем ВЕСЬ скрипт в одной транзакции
+            old_autocommit = db.connection.autocommit
+            db.connection.autocommit = False
 
-            # Выполняем команды по очереди
-            success_count = 0
-            error_count = 0
-
-            for i, command in enumerate(commands, 1):
-                command = command.strip()
-                if not command or command.startswith('--'):
-                    continue
-
-                print(f"🔧 Выполняем команду {i}/{len(commands)}: {command[:100]}...")
-
-                try:
-                    # Для команд DROP и CREATE используем обычное выполнение
-                    if command.upper().startswith(('DROP', 'CREATE', 'ALTER', 'SET')):
-                        result = db.execute_query(command, fetch=False)
-                    # Для INSERT используем выполнение с обработкой ошибок
-                    elif command.upper().startswith('INSERT'):
-                        try:
-                            result = db.execute_query(command, fetch=False)
-                        except Exception as e:
-                            print(f"⚠️ Ошибка INSERT, пропускаем: {e}")
-                            continue
-                    else:
-                        result = db.execute_query(command, fetch=False)
-
-                    if result:
-                        success_count += 1
-                    else:
-                        error_count += 1
-                        print(f"❌ Ошибка выполнения команды: {command[:200]}")
-
-                except Exception as e:
-                    error_count += 1
-                    print(f"❌ Исключение при выполнении команды: {e}")
-                    print(f"    Команда: {command[:200]}")
-
-            print(f"📊 Результат восстановления: {success_count} успешно, {error_count} с ошибками")
-
-            # Считаем восстановление успешным если выполнено больше 50% команд
-            total_commands = success_count + error_count
-            success_rate = success_count / total_commands if total_commands > 0 else 0
-
-            print(f"📈 Успешность: {success_rate:.1%}")
-
-            return success_rate > 0.5
+            try:
+                db.cursor.execute(sql_script)
+                db.connection.commit()
+                print("✅ SQL-бэкап восстановлен успешно в одной транзакции")
+                return True
+            except Exception as e:
+                db.connection.rollback()
+                print(f"❌ Ошибка при восстановлении в одной транзакции: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+            finally:
+                db.connection.autocommit = old_autocommit
 
         except Exception as e:
-            print(f"💥 Ошибка при восстановлении через SQL скрипт: {e}")
+            print(f"💥 Критическая ошибка: {e}")
             import traceback
             traceback.print_exc()
             return False

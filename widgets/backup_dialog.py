@@ -44,13 +44,13 @@ class BackupDialog(QDialog):
     """Диалог управления резервными копиями"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        apply_dialog_style(self)  #
+        apply_dialog_style(self)
         self.setup_ui()
         self.load_backups()
 
     def setup_ui(self):
         self.setWindowTitle("Управление резервными копиями БД")
-        self.setFixedSize(650, 450)  # ← увеличен размер
+        self.setFixedSize(750, 450)  # ← увеличен размер
 
         # Главный layout
         main_layout = QVBoxLayout()
@@ -91,22 +91,25 @@ class BackupDialog(QDialog):
 
         # Кнопки управления
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)  # ← Отступ между кнопками
+        button_layout.setContentsMargins(0, 10, 0, 0)  # ← Отступ сверху
+
         create_btn = QPushButton("Создать резервную копию")
         restore_btn = QPushButton("Восстановить из выбранной")
         delete_btn = QPushButton("Удалить выбранную")
-        close_btn = QPushButton("Закрыть")
 
-        for btn in [create_btn, restore_btn, delete_btn, close_btn]:
+        for btn in [create_btn, restore_btn, delete_btn]:
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3498db;
                     color: white;
                     border: none;
                     border-radius: 6px;
-                    padding: 10px 15px;
+                    padding: 12px 20px;
                     font-size: 13px;
                     font-weight: bold;
                     min-width: 140px;
+                    min-height: 40px;
                 }
                 QPushButton:hover { background-color: #2980b9; }
                 QPushButton:pressed { background-color: #21618c; }
@@ -115,13 +118,11 @@ class BackupDialog(QDialog):
         create_btn.clicked.connect(self.create_backup)
         restore_btn.clicked.connect(self.restore_backup)
         delete_btn.clicked.connect(self.delete_backup)
-        close_btn.clicked.connect(self.reject)
 
         button_layout.addWidget(create_btn)
         button_layout.addWidget(restore_btn)
         button_layout.addWidget(delete_btn)
-        button_layout.addStretch()
-        button_layout.addWidget(close_btn)
+        button_layout.addStretch()  # ← Растягиваемое пространство — кнопки не съезжают
 
         frame_layout.addLayout(button_layout)
         frame.setLayout(frame_layout)
