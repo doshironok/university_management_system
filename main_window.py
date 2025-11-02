@@ -120,10 +120,15 @@ class MainWindow(QMainWindow):
         nav_buttons = self.create_navigation_buttons()
         layout.addWidget(nav_buttons)
 
-        # Растягивающийся элемент чтобы прижать остальные элементы к верху
+        # Растягивающийся элемент, чтобы прижать остальные элементы к верху
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(spacer)
+
+        guide_btn = QPushButton("📖 Инструкция")
+        guide_btn.setObjectName("nav_button")
+        guide_btn.clicked.connect(self.show_user_guide)
+        layout.addWidget(guide_btn)
 
         # Кнопка выхода
         logout_btn = QPushButton("Выйти из системы")
@@ -233,6 +238,12 @@ class MainWindow(QMainWindow):
 
         widget.setLayout(self.content_layout)
         return widget
+
+    def show_user_guide(self):
+        from user_guide_window import UserGuideWindow
+        role = user_manager.current_user['role']
+        self.guide_window = UserGuideWindow(role, self)
+        self.guide_window.show()
 
     def get_role_name(self, role):
         role_names = {
