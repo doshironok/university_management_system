@@ -483,7 +483,7 @@ class BackupService:
 
     @staticmethod
     def _restore_with_sql_script(backup_file):
-        """Восстановление через выполнение SQL скрипта в ОДНОЙ транзакции"""
+        """Восстановление через выполнение SQL скрипта В ОДНОЙ ТРАНЗАКЦИИ"""
         try:
             print("🔍 Восстановление через SQL скрипт в одной транзакции...")
             from database import db
@@ -497,23 +497,23 @@ class BackupService:
 
             print(f"📖 Размер SQL скрипта: {len(sql_script)} символов")
 
-            # Выполняем ВЕСЬ скрипт в одной транзакции
+            # === Выполняем ВЕСЬ скрипт в одной транзакции ===
             old_autocommit = db.connection.autocommit
-            db.connection.autocommit = False
+            db.connection.autocommit = False  # Отключаем автокоммит
 
             try:
-                db.cursor.execute(sql_script)
+                db.cursor.execute(sql_script)  # Вся логика — в одном execute
                 db.connection.commit()
                 print("✅ SQL-бэкап восстановлен успешно в одной транзакции")
                 return True
             except Exception as e:
                 db.connection.rollback()
-                print(f"❌ Ошибка при восстановлении в одной транзакции: {e}")
+                print(f"❌ Ошибка при восстановлении: {e}")
                 import traceback
                 traceback.print_exc()
                 return False
             finally:
-                db.connection.autocommit = old_autocommit
+                db.connection.autocommit = old_autocommit  # Восстанавливаем
 
         except Exception as e:
             print(f"💥 Критическая ошибка: {e}")

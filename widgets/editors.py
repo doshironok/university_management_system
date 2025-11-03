@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLineEdit, QComboBox, QMessageBox,
                              QDialog, QFormLayout, QDateEdit, QSpinBox,
-                             QCheckBox, QGroupBox, QTextEdit)
+                             QCheckBox, QGroupBox, QTextEdit, QFrame)
 from PyQt6.QtCore import Qt, QDate
 from database import db
 from services.data_service import DataService
@@ -119,70 +119,73 @@ class StudentEditor(QDialog):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
 
 class GradeEditor(QDialog):
-    """Диалог выставления оценки"""
+    """Диалог выставления/редактирования оценки"""
 
     def __init__(self, student_data, study_plan_id, existing_grade=None, parent=None):
         super().__init__(parent)
         apply_dialog_style(self)
-        self.student_data = student_data
-        self.study_plan_id = study_plan_id
-        self.existing_grade = existing_grade
+        self.student_data = student_data          # (id, fio, record_book)
+        self.study_plan_id = study_plan_id      # int
+        self.existing_grade = existing_grade    # кортеж из БД или None
+        print(f"🔍 [DEBUG] Создание GradeEditor: student_data={student_data}, study_plan_id={study_plan_id}, existing_grade={existing_grade}")
         self.setup_ui()
 
     def setup_ui(self):
         title = "Редактирование оценки" if self.existing_grade else "Выставление оценки"
         self.setWindowTitle(title)
-        self.setFixedSize(400, 300)
+        self.setFixedSize(450, 320)
 
-        layout = QFormLayout()
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Информация о студенте
-        student_info = QLabel(f"Студент: {self.student_data[1]}\n"
-                              f"Зачётная книжка: {self.student_data[2]}")
-        layout.addRow(student_info)
+        frame = QFrame()
+        frame.setObjectName("dialog_frame")
+        frame_layout = QFormLayout()
+        frame_layout.setContentsMargins(40, 40, 40, 40)
 
-        # Поля формы
+        student_info = QLabel(f"<b>Студент:</b> {self.student_data[1]}<br>"
+                              f"<b>Зачётная книжка:</b> {self.student_data[2]}")
+        student_info.setStyleSheet("font-size: 14px; margin-bottom: 15px;")
+        frame_layout.addRow(student_info)
+
         self.grade_combo = QComboBox()
         self.grade_combo.addItems(["5", "4", "3", "2", "зачёт", "незачёт"])
-
         self.type_combo = QComboBox()
         self.type_combo.addItems(["экзамен", "зачёт", "курсовая работа", "практическая работа"])
-
         self.date_edit = QDateEdit()
         self.date_edit.setDate(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
 
-        # Заполняем данные если редактируем
         if self.existing_grade:
-            grade_index = self.grade_combo.findText(self.existing_grade[2])
-            if grade_index >= 0:
-                self.grade_combo.setCurrentIndex(grade_index)
-
-            type_index = self.type_combo.findText(self.existing_grade[3])
-            if type_index >= 0:
-                self.type_combo.setCurrentIndex(type_index)
-
-            if self.existing_grade[4]:  # exam_date
+            self.grade_combo.setCurrentText(self.existing_grade[2])
+            self.type_combo.setCurrentText(self.existing_grade[3])
+            if self.existing_grade and self.existing_grade[4]:
+                # Теперь exam_date — это всегда строка в формате 'YYYY-MM-DD'
                 self.date_edit.setDate(QDate.fromString(self.existing_grade[4], "yyyy-MM-dd"))
 
-        layout.addRow("Оценка:", self.grade_combo)
-        layout.addRow("Тип контроля:", self.type_combo)
-        layout.addRow("Дата:", self.date_edit)
+        frame_layout.addRow("Оценка:", self.grade_combo)
+        frame_layout.addRow("Тип контроля:", self.type_combo)
+        frame_layout.addRow("Дата:", self.date_edit)
 
-        # Кнопки
         button_layout = QHBoxLayout()
         save_btn = QPushButton("Сохранить")
+        delete_btn = QPushButton("Удалить") if self.existing_grade else None
         cancel_btn = QPushButton("Отмена")
 
         save_btn.clicked.connect(self.save_grade)
         cancel_btn.clicked.connect(self.reject)
+        if delete_btn:
+            delete_btn.clicked.connect(self.delete_grade)
 
         button_layout.addWidget(save_btn)
+        if delete_btn:
+            button_layout.addWidget(delete_btn)
         button_layout.addWidget(cancel_btn)
+        frame_layout.addRow(button_layout)
 
-        layout.addRow(button_layout)
-
-        self.setLayout(layout)
+        frame.setLayout(frame_layout)
+        main_layout.addWidget(frame)
+        self.setLayout(main_layout)
 
     def save_grade(self):
         """Сохранение оценки"""
@@ -190,33 +193,43 @@ class GradeEditor(QDialog):
         grade_type = self.type_combo.currentText()
         exam_date = self.date_edit.date().toString("yyyy-MM-dd")
 
+        print(f"💾 [DEBUG] Сохранение оценки: student_id={self.student_data[0]}, study_plan_id={self.study_plan_id}, grade='{grade}', type='{grade_type}', date='{exam_date}'")
+
         try:
             if self.existing_grade:
                 # Обновление существующей оценки
-                success = DataService.update_grade(
-                    self.existing_grade[0], grade, exam_date, grade_type
-                )
-                message = "Оценка обновлена"
-            else:
-                # Добавление новой оценки через хранимую процедуру БД
-                success = DataService.add_grade(
-                    self.student_data[0], self.study_plan_id, grade, exam_date, grade_type
-                )
-                message = "Оценка выставлена"
+                delete_query = "DELETE FROM grades WHERE id = %s"
+                db.execute_query(delete_query, (self.existing_grade[0],), fetch=False)
+
+            # Добавляем новую
+            insert_query = """
+            INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type)
+            VALUES (%s, %s, %s, %s, %s)
+            """
+            success = db.execute_query(
+                insert_query,
+                (self.student_data[0], self.study_plan_id, grade, exam_date, grade_type),
+                fetch=False
+            )
 
             if success:
-                QMessageBox.information(self, "Успех", message)
+                print("✅ [DEBUG] Оценка сохранена успешно")
+                QMessageBox.information(self, "Успех", "Оценка сохранена")
                 self.accept()
             else:
+                print("❌ [DEBUG] Не удалось сохранить оценку")
                 QMessageBox.warning(self, "Ошибка", "Не удалось сохранить оценку")
-
         except Exception as e:
+            print(f"💥 [DEBUG] Исключение при сохранении: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
 
 
 class ScheduleEditor(QDialog):
     def __init__(self, schedule_data=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.schedule_data = schedule_data  # (id, discipline_id, classroom_id, teacher_id, group_id, start, end, week_type)
         self.setup_ui()
         self.load_initial_data()
@@ -270,12 +283,26 @@ class ScheduleEditor(QDialog):
         delete_btn = QPushButton("Удалить")  # ← НОВАЯ КНОПКА
         check_btn = QPushButton("Проверить доступность")
         save_btn.clicked.connect(self.save_schedule)
-        delete_btn.clicked.connect(self.delete_schedule)  # ← Связь с новым методом
+        delete_btn.clicked.connect(self.delete_schedule)
         check_btn.clicked.connect(self.check_availability)
+        # Увеличиваем размер кнопки «Проверить доступность»
+        check_btn.setStyleSheet("""
+               QPushButton {
+                   background-color: #27ae60;
+                   color: white;
+                   border: none;
+                   border-radius: 6px;
+                   padding: 10px 20px;
+                   font-size: 13px;
+                   font-weight: bold;
+                   min-width: 180px;
+               }
+               QPushButton:hover { background-color: #2ecc71; }
+               QPushButton:pressed { background-color: #22a7f0; }
+           """)
         button_layout.addWidget(save_btn)
-        button_layout.addWidget(delete_btn)  # ← Добавляем рядом с сохранить
+        button_layout.addWidget(delete_btn)
         button_layout.addWidget(check_btn)
-        button_layout.addWidget(QPushButton("Отмена"))  # Отмена без связи — просто закрыть
         layout.addRow(button_layout)
         self.setLayout(layout)
 
@@ -470,6 +497,7 @@ class DisciplineEditor(QDialog):
 class StudyPlanEditor(QDialog):
     def __init__(self, plan_data=None, parent=None):
         super().__init__(parent)
+        apply_dialog_style(self)
         self.plan_data = plan_data  # (id, discipline_id, group_id, teacher_id, semester, lecture, practice)
         self.setup_ui()
         self.load_combobox_data()
@@ -545,16 +573,27 @@ class StudyPlanEditor(QDialog):
                 self.teacher_combo.addItem(teacher_fio, teacher_id)
 
     def save_plan(self):
-        """Сохранение учебного плана"""
+        """Сохранение учебного плана с отладочными логами"""
+        print("🔍 [DEBUG] Начало save_plan")
         discipline_id = self.discipline_combo.currentData()
         group_id = self.group_combo.currentData()
         teacher_id = self.teacher_combo.currentData()
         semester = self.semester_spin.value()
         lecture_hours = self.lecture_hours_spin.value()
         practice_hours = self.practice_hours_spin.value()
+
+        print(f"📝 [DEBUG] discipline_id = {discipline_id}")
+        print(f"📝 [DEBUG] group_id = {group_id}")
+        print(f"📝 [DEBUG] teacher_id = {teacher_id}")
+        print(f"📝 [DEBUG] semester = {semester}")
+        print(f"📝 [DEBUG] lecture_hours = {lecture_hours}")
+        print(f"📝 [DEBUG] practice_hours = {practice_hours}")
+
         if not all([discipline_id, group_id, teacher_id]):
             QMessageBox.warning(self, "Ошибка", "Заполните все поля")
+            print("❌ [DEBUG] Не заполнены обязательные поля")
             return
+
         try:
             if self.plan_data:
                 # Обновление
@@ -564,9 +603,10 @@ class StudyPlanEditor(QDialog):
                     semester = %s, hours_lecture = %s, hours_practice = %s
                 WHERE id = %s
                 """
-                params = (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours, self.plan_data[0])
-                success = db.execute_query(query, params, fetch=False)
-                message = "Учебный план обновлён"
+                params = (
+                discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours, self.plan_data[0])
+                print(f"🔄 [DEBUG] Выполняется UPDATE: {query}")
+                print(f"📊 [DEBUG] Параметры: {params}")
             else:
                 # Добавление
                 query = """
@@ -574,15 +614,25 @@ class StudyPlanEditor(QDialog):
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """
                 params = (discipline_id, group_id, teacher_id, semester, lecture_hours, practice_hours)
-                success = db.execute_query(query, params, fetch=False)
-                message = "Учебный план добавлен"
+                print(f"➕ [DEBUG] Выполняется INSERT: {query}")
+                print(f"📊 [DEBUG] Параметры: {params}")
+
+            success = db.execute_query(query, params, fetch=False)
+            print(f"✅ [DEBUG] Результат выполнения: {success}")
 
             if success:
+                message = "Учебный план обновлён" if self.plan_data else "Учебный план добавлен"
                 QMessageBox.information(self, "Успех", message)
                 self.accept()
+                print("✅ [DEBUG] Операция завершена успешно")
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось сохранить учебный план")
+                print("❌ [DEBUG] execute_query вернул False")
+
         except Exception as e:
+            print(f"💥 [DEBUG] Исключение в save_plan: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
 
     def delete_plan(self):

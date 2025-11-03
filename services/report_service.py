@@ -1,134 +1,332 @@
 from datetime import datetime
 from database import db
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 import os
 import tempfile
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches
-
+from docx.shared import Mm
 
 class ReportService:
     """Сервис для генерации отчетов"""
 
     @staticmethod
     def generate_student_record_book(student_id):
-        """Генерация зачётной книжки для студента"""
+        """Генерация зачётной книжки для студента по обновлённому шаблону"""
         try:
             print(f"🔍 Поиск студента с ID: {student_id}")
 
-            # Сначала проверим, существует ли студент
-            check_query = "SELECT id, fio, record_book_id FROM students WHERE id = %s"
-            check_result = db.execute_query(check_query, (student_id,))
-
-            if not check_result:
-                print(f"❌ Студент с ID {student_id} не найден в таблице students")
+            # 1. Основные данные студента + группа + направление + факультет + год поступления
+            student_query = """
+            SELECT 
+                s.fio, 
+                s.record_book_id,
+                g.name as group_name,
+                g.creation_year as enrollment_year,
+                sp.code as program_code,
+                sp.name as program_name,
+                'Факультет ИТиК' as faculty  --фиксированное значение, так как в БД нет таблицы faculties
+            FROM students s
+            JOIN groups g ON s.group_id = g.id
+            JOIN study_programs sp ON g.study_program_id = sp.id
+            WHERE s.id = %s
+            """
+            student_data = db.execute_query(student_query, (student_id,))
+            if not student_data:
                 raise Exception("Студент не найден")
 
-            print(f"✅ Студент найден: {check_result[0]}")
+            student_row = student_data[0]
+            student_fio = student_row[0]
+            record_book = student_row[1]
+            group = student_row[2]
+            enrollment_year = student_row[3]
+            program = f"{student_row[4]} – {student_row[5]}"  # Код + название
+            faculty = student_row[6]
 
-            # Упрощенный запрос - только основные данные студента
-            query = """
-               SELECT s.fio, s.record_book_id, g.name as group_name
-               FROM students s
-               JOIN groups g ON s.group_id = g.id
-               WHERE s.id = %s
-               """
-            student_data = db.execute_query(query, (student_id,))
-
-            if not student_data:
-                raise Exception("Данные студента не найдены")
-
-            print(f"📊 Данные студента: {student_data[0]}")
-
-            # Получаем оценки студента
+            # 2. Все оценки с деталями
             grades_query = """
-               SELECT d.name as discipline_name, 
-                      g.grade, 
-                      g.type as control_type,
-                      g.exam_date,
-                      t.fio as teacher_name,
-                      sp.semester
-               FROM grades g
-               JOIN study_plans sp ON g.study_plan_id = sp.id
-               JOIN disciplines d ON sp.discipline_id = d.id
-               LEFT JOIN teachers t ON sp.teacher_id = t.id
-               WHERE g.student_id = %s
-               ORDER BY sp.semester, d.name
-               """
+            SELECT 
+                d.name as discipline_name,
+                g.grade,
+                g.type as control_type,
+                g.exam_date,
+                t.fio as teacher_name,
+                sp.semester
+            FROM grades g
+            JOIN study_plans sp ON g.study_plan_id = sp.id
+            JOIN disciplines d ON sp.discipline_id = d.id
+            LEFT JOIN teachers t ON sp.teacher_id = t.id
+            WHERE g.student_id = %s
+            ORDER BY sp.semester, d.name
+            """
             grades_data = db.execute_query(grades_query, (student_id,))
+            if not grades_data:
+                grades_data = []
 
-            print(f"📚 Найдено оценок: {len(grades_data) if grades_data else 0}")
-
-            # Группируем оценки по семестрам
+            # 3. Группировка по семестрам с расчётом среднего балла и статистики
             semesters = {}
+            all_numeric_grades = []
+            total_disciplines = 0
+            total_passed = 0  # Считаем "зачёт", "3+", "4", "5" как сданное
+
             for grade in grades_data:
-                semester = grade[5]
-                if semester not in semesters:
-                    semesters[semester] = []
-                semesters[semester].append({
-                    'discipline': grade[0],
-                    'grade': grade[1],
-                    'type': grade[2],
-                    'date': grade[3].strftime('%d.%m.%Y') if grade[3] else '',
-                    'teacher': grade[4] or ''
+                discipline = grade[0]
+                grade_val = grade[1]
+                grade_type = grade[2]
+                exam_date = grade[3]
+                teacher = grade[4] or ''
+                semester_num = grade[5]
+
+                # Инициализация семестра
+                if semester_num not in semesters:
+                    semesters[semester_num] = {
+                        'number': semester_num,
+                        'grades': [],
+                        'numeric_grades': [],
+                        'passed_count': 0,
+                        'total_count': 0
+                    }
+
+                # Преобразуем дату в строку
+                date_str = exam_date.strftime('%d.%m.%Y') if exam_date else ''
+
+                # Добавляем оценку в список
+                semesters[semester_num]['grades'].append({
+                    'discipline': discipline,
+                    'type': grade_type,
+                    'grade': grade_val,
+                    'date': date_str,
+                    'teacher': teacher
                 })
 
-            # Подготавливаем данные для шаблона
+                # Обновляем статистику по семестру
+                semesters[semester_num]['total_count'] += 1
+                total_disciplines += 1
+
+                # Обработка "зачёт/незачёт"
+                if grade_val == 'зачёт':
+                    semesters[semester_num]['passed_count'] += 1
+                    total_passed += 1
+                    # Не добавляем в числовой балл
+                elif grade_val == 'незачёт':
+                    # Не сдано — ничего не добавляем
+                    pass
+                # Числовые оценки
+                elif grade_val and grade_val.isdigit():
+                    numeric_grade = int(grade_val)
+                    semesters[semester_num]['numeric_grades'].append(numeric_grade)
+                    all_numeric_grades.append(numeric_grade)
+                    if numeric_grade >= 3:
+                        semesters[semester_num]['passed_count'] += 1
+                        total_passed += 1
+                # Другие оценки (например, "неявка") — игнорируем
+
+            # 4. Вычисляем средние баллы по семестрам
+            for semester in semesters.values():
+                grades_list = semester['numeric_grades']
+                avg = sum(grades_list) / len(grades_list) if grades_list else 0.0
+                semester['avg_grade'] = f"{avg:.2f}"
+                # Также сохраняем статистику для отчёта (опционально)
+                semester['passed'] = semester['passed_count']
+                semester['total'] = semester['total_count']
+
+            # 5. Общий средний балл (только числовые оценки)
+            overall_avg = sum(all_numeric_grades) / len(all_numeric_grades) if all_numeric_grades else 0.0
+
+            # 6. Общее количество часов (без изменений)
+            hours_query = """
+            SELECT COALESCE(SUM(sp.hours_lecture + sp.hours_practice), 0)
+            FROM study_plans sp
+            JOIN students s ON sp.group_id = s.group_id
+            WHERE s.id = %s
+            """
+            hours_result = db.execute_query(hours_query, (student_id,))
+            total_hours = hours_result[0][0] if hours_result else 0
+
+            # 7. Формируем контекст
             context = {
-                'student_fio': student_data[0][0],
-                'record_book': student_data[0][1],
-                'group': student_data[0][2],
                 'current_date': datetime.now().strftime('%d.%m.%Y'),
-                'semesters': []
+                'record_book': record_book,
+                'student_fio': student_fio,
+                'group': group,
+                'program': program,
+                'faculty': faculty,
+                'enrollment_year': enrollment_year,
+                'semesters': [],
+                'overall_avg_grade': f"{overall_avg:.2f}",
+                'total_disciplines': total_disciplines,
+                'total_passed': total_passed,  # ← Добавлено: количество сданных
+                'total_hours': total_hours
             }
 
-            for semester, grades in sorted(semesters.items()):
-                context['semesters'].append({
-                    'number': semester,
-                    'grades': grades
-                })
+            # Сортируем семестры по номеру
+            for semester_num in sorted(semesters.keys()):
+                context['semesters'].append(semesters[semester_num])
 
             return context
 
         except Exception as e:
-            print(f"Ошибка при генерации зачётной книжки: {e}")
+            print(f"❌ Ошибка при генерации зачётной книжки: {e}")
             import traceback
             traceback.print_exc()
             return None
 
     @staticmethod
     def generate_grades_report(group_id, discipline_id):
-        """Генерация ведомости успеваемости по группе и дисциплине"""
-        # Используем функцию из БД
-        grades_data = db.execute_query("SELECT * FROM generate_grades_report(%s, %s)", (group_id, discipline_id))
+        """Генерация ведомости успеваемости с диаграммой и статистикой"""
+        try:
+            print(f"🔍 Генерация ведомости для группы {group_id}, дисциплины {discipline_id}")
 
-        # Получаем информацию о группе и дисциплине
-        info_query = """
-        SELECT g.name, d.name 
-        FROM groups g, disciplines d 
-        WHERE g.id = %s AND d.id = %s
-        """
-        info_data = db.execute_query(info_query, (group_id, discipline_id))
+            # 1. Основная информация
+            info_query = """
+            SELECT g.name, d.name, t.fio, sp.semester,
+                   (sp.hours_lecture + sp.hours_practice)
+            FROM study_plans sp
+            JOIN groups g ON sp.group_id = g.id
+            JOIN disciplines d ON sp.discipline_id = d.id
+            LEFT JOIN teachers t ON sp.teacher_id = t.id
+            WHERE sp.group_id = %s AND sp.discipline_id = %s
+            LIMIT 1
+            """
+            info_data = db.execute_query(info_query, (group_id, discipline_id))
+            if not info_data:
+                raise Exception("Учебный план не найден")
+            row = info_data[0]
+            group_name = row[0]
+            discipline_name = row[1]
+            teacher_name = row[2] or 'Не назначен'
+            semester = row[3]
+            total_hours = row[4] or 0
 
-        if not info_data:
+            # 2. Все студенты группы
+            students_query = """
+            SELECT s.id, s.fio, s.record_book_id, s.status
+            FROM students s
+            WHERE s.group_id = %s
+            ORDER BY s.fio
+            """
+            students_data = db.execute_query(students_query, (group_id,))
+            if not students_data:
+                students_data = []
+
+            # 3. Оценки по дисциплине
+            grades_query = """
+            SELECT g.student_id, g.grade, g.exam_date, g.type
+            FROM grades g
+            JOIN study_plans sp ON g.study_plan_id = sp.id
+            WHERE sp.group_id = %s AND sp.discipline_id = %s
+            """
+            grades_data = db.execute_query(grades_query, (group_id, discipline_id))
+            grades_dict = {}
+            if grades_data:
+                for grade_row in grades_data:
+                    student_id = grade_row[0]
+                    grades_dict[student_id] = {
+                        'grade': grade_row[1],
+                        'exam_date': grade_row[2],
+                        'control_type': grade_row[3]
+                    }
+
+            # 4. Формируем список студентов с оценками
+            grades = []
+            passed = failed = 0
+            all_numeric_grades = []
+
+            for i, student in enumerate(students_data, 1):
+                student_id, fio, record_book, status = student
+                grade_info = grades_dict.get(student_id)
+
+                if grade_info:
+                    grade_val = grade_info['grade']
+                    exam_date = grade_info['exam_date']
+                    control_type = grade_info['control_type']
+                    date_str = exam_date.strftime('%d.%m.%Y') if exam_date else ''
+                else:
+                    grade_val = 'Нет оценки'
+                    date_str = ''
+                    control_type = ''
+
+                grades.append({
+                    'position': i,
+                    'student_fio': fio,
+                    'grade': grade_val,
+                    'exam_date': date_str,
+                    'control_type': control_type,
+                    'record_book': record_book
+                })
+
+                # Статистика
+                if grade_val == 'зачёт':
+                    passed += 1
+                elif grade_val == 'незачёт':
+                    failed += 1
+                elif grade_val and grade_val.isdigit():
+                    numeric_grade = int(grade_val)
+                    all_numeric_grades.append(numeric_grade)
+                    if numeric_grade >= 3:
+                        passed += 1
+                    else:
+                        failed += 1
+
+            total_students = len(grades)
+            avg_grade = sum(all_numeric_grades) / len(all_numeric_grades) if all_numeric_grades else 0.0
+
+            # 5. Создаём круговую диаграмму
+            pie_chart = None
+            if total_students > 0:
+                from docxtpl import InlineImage
+                import matplotlib.pyplot as plt
+                import io
+                from docx.shared import Mm
+
+                labels = []
+                sizes = []
+                colors = []
+                if passed > 0:
+                    labels.append('Сдали')
+                    sizes.append(passed)
+                    colors.append('#27ae60')  # Зелёный
+                if failed > 0:
+                    labels.append('Не сдали')
+                    sizes.append(failed)
+                    colors.append('#e74c3c')  # Красный
+
+                if labels:
+                    plt.figure(figsize=(6, 6))
+                    plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                    plt.title('Результаты по дисциплине', fontsize=14)
+                    plt.axis('equal')
+
+                    img_buffer = io.BytesIO()
+                    plt.savefig(img_buffer, format='png', bbox_inches='tight')
+                    img_buffer.seek(0)
+                    plt.close()
+                    pie_chart = img_buffer  # Передаём буфер, а не InlineImage
+
+            # 6. Формируем контекст
+            context = {
+                'current_date': datetime.now().strftime('%d.%m.%Y'),
+                'group_name': group_name,
+                'discipline_name': discipline_name,
+                'teacher_name': teacher_name,
+                'semester': semester,
+                'total_hours': total_hours,
+                'grades': grades,
+                'total_students': total_students,
+                'passed_count': passed,
+                'failed_count': failed,
+                'avg_grade': f"{avg_grade:.2f}",
+                'pie_chart': pie_chart
+            }
+
+            return context
+
+        except Exception as e:
+            print(f"❌ Ошибка при генерации ведомости: {e}")
+            import traceback
+            traceback.print_exc()
             return None
-
-        context = {
-            'group_name': info_data[0][0],
-            'discipline_name': info_data[0][1],
-            'current_date': datetime.now().strftime('%d.%m.%Y'),
-            'grades': []
-        }
-
-        for grade in grades_data:
-            context['grades'].append({
-                'student_fio': grade[0],
-                'grade': grade[1],
-                'exam_date': grade[2].strftime('%d.%m.%Y') if grade[2] else 'Не сдано'
-            })
-
-        return context
 
     @staticmethod
     def generate_teacher_workload_report(teacher_id):
@@ -176,109 +374,223 @@ class ReportService:
         return context
 
     @staticmethod
-    def generate_classroom_occupancy_report():
-        """Генерация отчета по занятости аудиторий"""
+    def generate_classroom_occupancy_report(building_filter=None):
+        """Генерация отчёта по занятости аудиторий с поддержкой фильтрации и статистики"""
         try:
-            print("🔍 Генерация отчета по занятости аудиторий...")
+            print("🔍 Генерация отчёта по занятости аудиторий...")
 
-            # Получаем данные о занятости аудиторий
-            query = """
+            # 1. Формируем фильтр по корпусу
+            building_where = ""
+            building_params = []
+            if building_filter:
+                building_where = "AND c.building = %s"
+                building_params = [building_filter]
+
+            # 2. Запрос для расчёта занятости
+            query = f"""
             SELECT 
-                c.number as classroom_number,
+                c.number,
+                c.building,
                 c.capacity,
-                c.type as classroom_type,
-                COUNT(s.id) as total_lessons,
-                COUNT(DISTINCT s.discipline_id) as unique_disciplines,
-                COUNT(DISTINCT s.teacher_id) as unique_teachers,
-                STRING_AGG(DISTINCT TO_CHAR(s.start_time, 'Day'), ', ') as days_of_week
+                c.type,
+                COUNT(s.id) as total_lessons
             FROM classrooms c
             LEFT JOIN schedule s ON c.id = s.classroom_id
-            GROUP BY c.id, c.number, c.capacity, c.type
-            ORDER BY c.number
+            WHERE 1=1 {building_where}
+            GROUP BY c.id, c.number, c.building, c.capacity, c.type
+            ORDER BY c.building, c.number
             """
-
-            print("📊 Выполняем запрос к БД...")
-            classroom_data = db.execute_query(query)
-            print(f"📋 Получено данных: {len(classroom_data) if classroom_data else 0} аудиторий")
-
+            params = building_params
+            classroom_data = db.execute_query(query, params)
             if not classroom_data:
-                print("ℹ️ Нет данных об аудиториях")
-                # Создаем тестовые данные для отладки
-                classroom_data = [
-                    ['101', 30, 'Лекционная', 10, 5, 3, 'Понедельник, Вторник'],
-                    ['202', 20, 'Практическая', 8, 4, 2, 'Среда, Четверг']
-                ]
-                print("🛠️ Используем тестовые данные")
+                classroom_data = []
 
-            # Подготавливаем данные для шаблона
-            context = {
-                'current_date': datetime.now().strftime('%d.%m.%Y'),
-                'classrooms': []
-            }
+            # 3. Подготавливаем данные с расчётом загруженности
+            classrooms = []
+            total_lessons_all = 0
+            occupancy_rates = []
 
-            for classroom in classroom_data:
-                context['classrooms'].append({
-                    'number': str(classroom[0]) if classroom[0] else "Н/Д",
-                    'capacity': str(classroom[1]) if classroom[1] else "0",
-                    'type': str(classroom[2]) if classroom[2] else "Н/Д",
-                    'total_lessons': str(classroom[3]) if classroom[3] else "0",
-                    'unique_disciplines': str(classroom[4]) if classroom[4] else "0",
-                    'unique_teachers': str(classroom[5]) if classroom[5] else "0",
-                    'days_of_week': str(classroom[6]) if classroom[6] else "Нет занятий"
+            for row in classroom_data:
+                number = str(row[0])
+                building = str(row[1]) if row[1] else "Н/Д"
+                capacity = int(row[2]) if row[2] else 0
+                room_type = str(row[3]) if row[3] else "Н/Д"
+                total_lessons = int(row[4]) if row[4] else 0
+
+                # Расчёт загруженности: максимум 84 пары в неделю (6 дней × 14 пар)
+                max_lessons_per_week = 84
+                occupancy_rate = (total_lessons / max_lessons_per_week * 100) if max_lessons_per_week > 0 else 0.0
+
+                classrooms.append({
+                    'number': number,
+                    'building': building,
+                    'capacity': capacity,
+                    'type': room_type,
+                    'total_lessons': total_lessons,
+                    'occupancy_rate': f"{occupancy_rate:.1f}%"
                 })
 
-            print(f"✅ Данные для отчета подготовлены: {len(context['classrooms'])} аудиторий")
+                total_lessons_all += total_lessons
+                occupancy_rates.append(occupancy_rate)
+
+            # 4. Сводная статистика
+            total_classrooms = len(classrooms)
+            avg_occupancy = sum(occupancy_rates) / len(occupancy_rates) if occupancy_rates else 0.0
+
+            summary = {
+                'total_classrooms': total_classrooms,
+                'total_lessons': total_lessons_all,
+                'avg_occupancy_rate': f"{avg_occupancy:.1f}%"
+            }
+
+            # 5. Формируем контекст
+            context = {
+                'current_date': datetime.now().strftime('%d.%m.%Y'),
+                'building_filter': f"Корпус: {building_filter}" if building_filter else "Все корпуса",
+                'classrooms': classrooms,
+                'summary': summary
+            }
+
             return context
 
         except Exception as e:
-            print(f"❌ Ошибка при генерации отчета по занятости аудиторий: {e}")
+            print(f"❌ Ошибка при генерации отчёта по занятости аудиторий: {e}")
             import traceback
             traceback.print_exc()
             return None
 
     @staticmethod
     def generate_student_rating_report(group_id):
-        """Генерация рейтинга студентов группы"""
+        """Генерация академического рейтинга студентов с расширенной статистикой и диаграммой"""
         try:
             print(f"🔍 Генерация рейтинга для группы ID: {group_id}")
 
-            # Используем исправленную функцию из БД
+            # 1. Получаем данные группы
+            group_query = """
+            SELECT name, creation_year
+            FROM groups
+            WHERE id = %s
+            """
+            group_result = db.execute_query(group_query, (group_id,))
+            if not group_result:
+                raise Exception("Группа не найдена")
+            group_name = group_result[0][0]
+            creation_year = group_result[0][1]
+            course = 2025 - creation_year + 1
+            semester = (course - 1) * 2 + 1
+
+            # 2. Получаем рейтинг через функцию БД
             rating_data = db.execute_query("SELECT * FROM get_student_rating(%s)", (group_id,))
+            if not rating_data:
+                rating_data = []
 
-            if rating_data is None or rating_data is False:
-                print("❌ Нет данных рейтинга или ошибка запроса")
-                return None
+            # 3. Классифицируем студентов
+            students = []
+            excellent = good = satisfactory = debt = 0
+            excellent_list = []
+            good_list = []
+            satisfactory_list = []
+            debt_list = []
 
-            # Информация о группе
-            group_query = "SELECT name FROM groups WHERE id = %s"
-            group_data = db.execute_query(group_query, (group_id,))
+            for record in rating_data:
+                position = record[3]
+                fio = record[1]
+                avg_grade = float(record[2]) if record[2] else 0.0
 
-            if not group_data:
-                print("❌ Группа не найдена")
-                return None
+                student = {
+                    'position': position,
+                    'fio': fio,
+                    'avg_grade': avg_grade
+                }
+                students.append(student)
 
+                if avg_grade >= 4.5:
+                    excellent += 1
+                    excellent_list.append(fio)
+                elif avg_grade >= 3.5:
+                    good += 1
+                    good_list.append(fio)
+                elif avg_grade >= 2.5:
+                    satisfactory += 1
+                    satisfactory_list.append(fio)
+                else:
+                    debt += 1
+                    debt_list.append(fio)
+
+            total = len(students)
+            excellent_pct = (excellent / total * 100) if total > 0 else 0.0
+            good_pct = (good / total * 100) if total > 0 else 0.0
+            satisfactory_pct = (satisfactory / total * 100) if total > 0 else 0.0
+            debt_pct = (debt / total * 100) if total > 0 else 0.0
+
+            group_avg_grade = sum(s['avg_grade'] for s in students) / total if total > 0 else 0.0
+            best_student = max(students, key=lambda x: x['avg_grade']) if students else None
+
+            # 4. Создаём круговую диаграмму
+            from docxtpl import InlineImage
+            import matplotlib.pyplot as plt
+            import io
+            from docx.shared import Mm
+
+            pie_chart = None
+            if total > 0:
+                labels = []
+                sizes = []
+                colors = []
+                if excellent > 0:
+                    labels.append('Отличники (≥4.5)')
+                    sizes.append(excellent_pct)
+                    colors.append('#27ae60')  # Зелёный
+                if good > 0:
+                    labels.append('Хорошисты (3.5–4.4)')
+                    sizes.append(good_pct)
+                    colors.append('#2ecc71')  # Светло-зелёный
+                if satisfactory > 0:
+                    labels.append('Троечники (2.5–3.4)')
+                    sizes.append(satisfactory_pct)
+                    colors.append('#f39c12')  # Оранжевый
+                if debt > 0:
+                    labels.append('Должники (<2.5)')
+                    sizes.append(debt_pct)
+                    colors.append('#e74c3c')  # Красный
+
+                if labels:
+                    plt.figure(figsize=(6, 6))
+                    plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                    plt.title('Академическая успеваемость группы', fontsize=14)
+                    plt.axis('equal')
+
+                    img_buffer = io.BytesIO()
+                    plt.savefig(img_buffer, format='png', bbox_inches='tight')
+                    img_buffer.seek(0)
+                    plt.close()
+                    pie_chart = img_buffer
+
+            # 5. Формируем контекст
             context = {
-                'group_name': group_data[0][0],
                 'current_date': datetime.now().strftime('%d.%m.%Y'),
-                'students': []
-            }
+                'group_name': group_name,
+                'course': course,
+                'semester': semester,
+                'total_students': total,
+                'students': students,
+                'group_avg_grade': f"{group_avg_grade:.2f}",
+                'best_student': best_student['fio'] if best_student else "Нет данных",
+                'best_grade': f"{best_student['avg_grade']:.2f}" if best_student else "0.00",
 
-            if rating_data:
-                for student in rating_data:
-                    context['students'].append({
-                        'position': student[3] if len(student) > 3 else 0,  # student_rank
-                        'fio': student[1] if len(student) > 1 else 'Неизвестно',
-                        'avg_grade': float(student[2]) if student[2] and len(student) > 2 else 0.0
-                    })
-                print(f"✅ Найдено студентов в рейтинге: {len(rating_data)}")
-            else:
-                print("ℹ️ Нет данных для рейтинга")
-                # Добавим тестовые данные для отладки
-                context['students'] = [
-                    {'position': 1, 'fio': 'Иванов Иван', 'avg_grade': 4.5},
-                    {'position': 2, 'fio': 'Петров Петр', 'avg_grade': 4.2},
-                    {'position': 3, 'fio': 'Сидорова Анна', 'avg_grade': 4.0}
-                ]
+                # Новые поля для категорий
+                'excellent_count': excellent,
+                'excellent_pct': f"{excellent_pct:.1f}",
+                'good_count': good,
+                'good_pct': f"{good_pct:.1f}",
+                'satisfactory_count': satisfactory,
+                'satisfactory_pct': f"{satisfactory_pct:.1f}",
+                'debt_count': debt,
+                'debt_pct': f"{debt_pct:.1f}",
+
+                # Диаграмма
+                'pie_chart': pie_chart
+            }
 
             return context
 
@@ -294,55 +606,21 @@ class DocumentGenerator:
 
     @staticmethod
     def generate_document(template_name, context, output_filename):
-        """Генерация документа из шаблона"""
         try:
-            print(f"🔍 Начало генерации документа: {template_name}")
-
-            # Путь к шаблонам
             templates_dir = os.path.join(os.path.dirname(__file__), '..', 'templates')
             template_path = os.path.join(templates_dir, template_name)
-
-            print(f"🔍 Поиск шаблона: {template_path}")
-            print(f"🔍 Директория шаблонов существует: {os.path.exists(templates_dir)}")
-
-            if os.path.exists(templates_dir):
-                files = os.listdir(templates_dir)
-                print(f"📂 Файлы в директории templates: {files}")
-
-            if not os.path.exists(template_path):
-                error_msg = f"Шаблон {template_name} не найден по пути: {template_path}"
-                print(f"❌ {error_msg}")
-                raise FileNotFoundError(error_msg)
-
-            print(f"✅ Шаблон найден, загружаем...")
-
-            # Проверяем контекст
-            print(f"📋 Контекст данных: {context.keys() if context else 'None'}")
-
-            # Загружаем шаблон
             doc = DocxTemplate(template_path)
-            print(f"✅ Шаблон загружен")
 
-            # Заполняем шаблон данными
-            print(f"🔍 Заполняем шаблон данными...")
+            # Если есть диаграмма — создаём InlineImage с привязкой к шаблону
+            if 'pie_chart' in context and context['pie_chart']:
+                context['pie_chart'] = InlineImage(doc, context['pie_chart'], width=Mm(100))
+
             doc.render(context)
-            print(f"✅ Шаблон заполнен")
-
-            # Сохраняем документ
-            project_root = os.path.join(os.path.dirname(__file__), '..')
-            reports_dir = os.path.join(project_root, 'reports')
-
-            if not os.path.exists(reports_dir):
-                os.makedirs(reports_dir)
-                print(f"✅ Создана папка reports: {reports_dir}")
-
+            reports_dir = os.path.join(os.path.dirname(__file__), '..', 'reports')
+            os.makedirs(reports_dir, exist_ok=True)
             output_path = os.path.join(reports_dir, output_filename)
-            print(f"💾 Сохраняем в: {output_path}")
             doc.save(output_path)
-
-            print(f"✅ Документ сохранен: {output_path}")
             return output_path
-
         except Exception as e:
             print(f"❌ Ошибка генерации документа: {e}")
             import traceback

@@ -1755,56 +1755,46 @@ class DekanatPanel(BasePanel):
                 self.load_disciplines()
 
     def add_study_plan(self):
-        """Добавление нового учебного плана"""
         from widgets.editors import StudyPlanEditor
         editor = StudyPlanEditor(parent=self)
         if editor.exec() == QDialog.DialogCode.Accepted:
             self.load_study_plans()
 
     def on_plan_action(self, row, column):
+        """Редактирование или удаление учебного плана — прямой вызов редактора"""
         if column == 7:  # Колонка "Действия"
-            plan_id = int(self.plans_table.item(row, 0).text())
-            discipline_name = self.plans_table.item(row, 1).text()
-            group_name = self.plans_table.item(row, 2).text()
-            teacher_name = self.plans_table.item(row, 3).text()
-            semester = int(self.plans_table.item(row, 4).text())
-            lect = int(self.plans_table.item(row, 5).text())
-            pract = int(self.plans_table.item(row, 6).text())
+            try:
+                plan_id = int(self.plans_table.item(row, 0).text())
+                discipline_name = self.plans_table.item(row, 1).text()
+                group_name = self.plans_table.item(row, 2).text()
+                teacher_name = self.plans_table.item(row, 3).text() or None
+                semester = int(self.plans_table.item(row, 4).text())
+                lect = int(self.plans_table.item(row, 5).text())
+                pract = int(self.plans_table.item(row, 6).text())
 
-            # Получаем ID по именам
-            disc_id = self._get_discipline_id_by_name(discipline_name)
-            group_id = self._get_group_id_by_name(group_name)
-            teacher_id = self._get_teacher_id_by_name(teacher_name)
+                print(f"🔍 [DEBUG] on_plan_action вызван для plan_id={plan_id}")
 
-            if disc_id is None or group_id is None:
-                QMessageBox.warning(self, "Ошибка", "Не удалось определить ID сущностей")
-                return
+                # Получаем ID по именам
+                disc_id = self._get_discipline_id_by_name(discipline_name)
+                group_id = self._get_group_id_by_name(group_name)
+                teacher_id = self._get_teacher_id_by_name(teacher_name) if teacher_name else None
 
-            plan_data = (plan_id, disc_id, group_id, teacher_id, semester, lect, pract)
+                print(f"📝 [DEBUG] disc_id={disc_id}, group_id={group_id}, teacher_id={teacher_id}")
 
-            # Диалог выбора действия
-            action = QMessageBox.question(
-                self, "Действие",
-                "Выберите действие:\n✅ — Редактировать\n🗑️ — Удалить",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel
-            )
-            if action == QMessageBox.StandardButton.Yes:
-                # Редактировать
+                if disc_id is None or group_id is None:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось определить ID сущностей")
+                    return
+
+                plan_data = (plan_id, disc_id, group_id, teacher_id, semester, lect, pract)
                 from widgets.editors import StudyPlanEditor
                 editor = StudyPlanEditor(plan_data=plan_data, parent=self)
                 if editor.exec() == QDialog.DialogCode.Accepted:
                     self.load_study_plans()
-            elif action == QMessageBox.StandardButton.No:
-                # Удалить
-                reply = QMessageBox.warning(
-                    self, "Подтверждение",
-                    f"Удалить учебный план?\nДисциплина: {discipline_name}\nГруппа: {group_name}",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    db.execute_query("DELETE FROM study_plans WHERE id = %s", (plan_id,), fetch=False)
-                    self.load_study_plans()
+            except Exception as e:
+                print(f"💥 [DEBUG] Ошибка в on_plan_action: {e}")
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при открытии редактора: {str(e)}")
 
     def create_study_plans_tab(self):
         """Вкладка управления учебными планами"""
@@ -2058,38 +2048,52 @@ class DekanatPanel(BasePanel):
         role = user_manager.current_user['role']
         dept_id = user_manager.current_user.get('department_id')
 
+        print(f"🔄 [DEBUG] Начало загрузки учебных планов. Роль: {role}, department_id: {dept_id}")
+
         if role == 'kafedra' and not dept_id:
             QMessageBox.warning(self, "Ошибка", "Не указана кафедра пользователя")
             return
 
-        if role == 'kafedra':
-            query = """
-            SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
-            FROM study_plans sp
-            JOIN disciplines d ON sp.discipline_id = d.id
-            JOIN groups g ON sp.group_id = g.id
-            LEFT JOIN teachers t ON sp.teacher_id = t.id
-            WHERE d.department_id = %s
-            ORDER BY g.name, sp.semester, d.name
-            """
-            result = db.execute_query(query, (dept_id,))
-        else:  # admin
-            query = """
-            SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
-            FROM study_plans sp
-            JOIN disciplines d ON sp.discipline_id = d.id
-            JOIN groups g ON sp.group_id = g.id
-            LEFT JOIN teachers t ON sp.teacher_id = t.id
-            ORDER BY g.name, sp.semester, d.name
-            """
-            result = db.execute_query(query)
+        try:
+            if role == 'kafedra':
+                query = """
+                SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
+                FROM study_plans sp
+                JOIN disciplines d ON sp.discipline_id = d.id
+                JOIN groups g ON sp.group_id = g.id
+                LEFT JOIN teachers t ON sp.teacher_id = t.id
+                WHERE d.department_id = %s
+                ORDER BY g.name, sp.semester, d.name
+                """
+                result = db.execute_query(query, (dept_id,))
+                print(f"📊 [DEBUG] Получено {len(result) if result else 0} записей для кафедры {dept_id}")
+            else:  # admin
+                query = """
+                SELECT sp.id, d.name, g.name, t.fio, sp.semester, sp.hours_lecture, sp.hours_practice
+                FROM study_plans sp
+                JOIN disciplines d ON sp.discipline_id = d.id
+                JOIN groups g ON sp.group_id = g.id
+                LEFT JOIN teachers t ON sp.teacher_id = t.id
+                ORDER BY g.name, sp.semester, d.name
+                """
+                result = db.execute_query(query)
+                print(f"📊 [DEBUG] Получено {len(result) if result else 0} записей (роль администратора)")
 
-        if result:
-            table_data = [row + ("✏️ 🗑️",) for row in result]
-            self.populate_table(self.plans_table, table_data)
-        else:
+            if result:
+                table_data = [row + ("✏️ 🗑️",) for row in result]
+                self.populate_table(self.plans_table, table_data)
+                print(f"✅ [DEBUG] Таблица учебных планов обновлена")
+            else:
+                self.plans_table.setRowCount(1)
+                self.plans_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
+                print("ℹ️ [DEBUG] Нет данных для отображения")
+
+        except Exception as e:
+            print(f"❌ [DEBUG] Ошибка при загрузке учебных планов: {e}")
+            import traceback
+            traceback.print_exc()
             self.plans_table.setRowCount(1)
-            self.plans_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
+            self.plans_table.setItem(0, 0, QTableWidgetItem("Ошибка загрузки"))
 
     def load_schedule(self):
         role = user_manager.current_user['role']
@@ -2814,8 +2818,9 @@ class TeacherPanel(BasePanel):
         table_layout.setContentsMargins(15, 25, 15, 15)
 
         self.grades_table = self.create_table([
-            "ID", "Студент", "Зачётная книжка", "Текущая оценка", "Действия"
+            "ID", "Студент", "Зачётная книжка", "Текущая оценка", "Действия", "study_plan_id"
         ])
+        self.grades_table.setColumnHidden(5, True)
         self.grades_table.cellDoubleClicked.connect(self.edit_grade)
         table_layout.addWidget(self.grades_table)
 
@@ -2874,7 +2879,7 @@ class TeacherPanel(BasePanel):
                         actions = "➕ Выставить"
                     else:
                         actions = "✏️ Редактировать | 🗑️ Удалить"
-                    table_data.append((student_id, fio, record_book, grade, actions))
+                    table_data.append((student_id, fio, record_book, grade, actions, study_plan_id))
 
                 self.populate_table(self.grades_table, table_data)
             else:
@@ -2886,110 +2891,41 @@ class TeacherPanel(BasePanel):
             QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить студентов: {str(e)}")
 
     def edit_grade(self, row, column):
-        """Редактирование или удаление оценки студента"""
+        """Редактирование или удаление оценки студента — ЕДИНЫЙ диалог"""
         if column == 4:  # Колонка "Действия"
             student_id = self.grades_table.item(row, 0).text()
             student_fio = self.grades_table.item(row, 1).text()
             record_book = self.grades_table.item(row, 2).text()
             current_grade = self.grades_table.item(row, 3).text()
-
             student_data = (student_id, student_fio, record_book)
 
             # Получаем study_plan_id
             discipline_id = self.grade_discipline_filter.currentData()
             group_id = self.grade_group_filter.currentData()
-
             study_plan_query = """
             SELECT id FROM study_plans 
             WHERE discipline_id = %s AND group_id = %s AND teacher_id = %s
             """
             study_plan_result = db.execute_query(study_plan_query, (discipline_id, group_id, self.teacher_id))
-
             if not study_plan_result:
                 QMessageBox.warning(self, "Ошибка", "Не найден учебный план")
                 return
-
             study_plan_id = study_plan_result[0][0]
 
             # Проверяем есть ли существующая оценка
             existing_grade_query = """
-            SELECT id, student_id, grade, type, exam_date 
+            SELECT id, student_id, grade, type, TO_CHAR(exam_date, 'YYYY-MM-DD') AS exam_date
             FROM grades 
             WHERE student_id = %s AND study_plan_id = %s
             """
             existing_grade_result = db.execute_query(existing_grade_query, (student_id, study_plan_id))
-
             existing_grade = existing_grade_result[0] if existing_grade_result else None
 
-            if current_grade == 'Нет оценки':
-                # Выставление новой оценки
-                from widgets.editors import GradeEditor
-                editor = GradeEditor(student_data, study_plan_id, None, parent=self)
-                if editor.exec() == QDialog.DialogCode.Accepted:
-                    self.load_students_for_grading()
-            else:
-                # Редактирование или удаление существующей оценки
-                self.show_grade_actions_dialog(student_id, student_fio, existing_grade, study_plan_id)
-
-    def show_grade_actions_dialog(self, student_id, student_fio, existing_grade, study_plan_id):
-        """Диалог выбора действия с оценкой"""
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Действия с оценкой: {student_fio}")
-        dialog.setFixedSize(300, 200)
-
-        layout = QVBoxLayout()
-
-        info_label = QLabel(f"Студент: {student_fio}\nТекущая оценка: {existing_grade[2]}")
-        info_label.setStyleSheet("font-weight: bold; margin-bottom: 20px;")
-        layout.addWidget(info_label)
-
-        edit_btn = QPushButton("✏️ Редактировать оценку")
-        delete_btn = QPushButton("🗑️ Удалить оценку")
-        cancel_btn = QPushButton("Отмена")
-
-        edit_btn.clicked.connect(lambda: self.edit_existing_grade(existing_grade, student_fio, dialog))
-        delete_btn.clicked.connect(lambda: self.delete_grade(existing_grade[0], student_fio, dialog))
-        cancel_btn.clicked.connect(dialog.reject)
-
-        layout.addWidget(edit_btn)
-        layout.addWidget(delete_btn)
-        layout.addWidget(cancel_btn)
-
-        dialog.setLayout(layout)
-        dialog.exec()
-
-    def edit_existing_grade(self, existing_grade, student_fio, parent_dialog):
-        """Редактирование существующей оценки"""
-        student_data = (existing_grade[1], student_fio, "")
-        from widgets.editors import GradeEditor
-        editor = GradeEditor(student_data, None, existing_grade, parent=self)
-        if editor.exec() == QDialog.DialogCode.Accepted:
-            parent_dialog.accept()
-            self.load_students_for_grading()
-
-    def delete_grade(self, grade_id, student_fio, parent_dialog):
-        """Удаление оценки"""
-        reply = QMessageBox.question(
-            self,
-            "Подтверждение удаления",
-            f"Вы уверены, что хотите удалить оценку у студента {student_fio}?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                query = "DELETE FROM grades WHERE id = %s"
-                success = db.execute_query(query, (grade_id,), fetch=False)
-
-                if success:
-                    QMessageBox.information(self, "Успех", "Оценка удалена")
-                    parent_dialog.accept()
-                    self.load_students_for_grading()
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить оценку")
-
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении оценки: {str(e)}")
+            # Открываем редактор
+            from widgets.editors import GradeEditor
+            editor = GradeEditor(student_data, study_plan_id, existing_grade, parent=self)
+            if editor.exec() == QDialog.DialogCode.Accepted:
+                self.load_students_for_grading()
 
     def create_reports_tab(self):
         """Вкладка отчетов для преподавателя"""
