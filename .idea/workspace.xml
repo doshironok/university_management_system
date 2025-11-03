@@ -4,17 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Добавлено окно инструкции пользователя для каждой роли">
+    <list default="true" id="37b628ea-bd92-4092-9135-7596ae266016" name="Changes" comment="Обновление некоторых диалоговых окон, обновление шаблонов отчётов, обновление метода восстановления бэкапа">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/backup_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/backup_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/report_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/report_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/classroom_occupancy_template.docx" beforeDir="false" afterPath="$PROJECT_DIR$/templates/classroom_occupancy_template.docx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/grades_report_template.docx" beforeDir="false" afterPath="$PROJECT_DIR$/templates/grades_report_template.docx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/record_book_template.docx" beforeDir="false" afterPath="$PROJECT_DIR$/templates/record_book_template.docx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/student_rating_template.docx" beforeDir="false" afterPath="$PROJECT_DIR$/templates/student_rating_template.docx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/workload_report_template.docx" beforeDir="false" afterPath="$PROJECT_DIR$/templates/workload_report_template.docx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/widgets/editors.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/editors.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/widgets/role_panels.py" beforeDir="false" afterPath="$PROJECT_DIR$/widgets/role_panels.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -172,7 +164,15 @@
       <option name="project" value="LOCAL" />
       <updated>1762172980808</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Обновление некоторых диалоговых окон, обновление шаблонов отчётов, обновление метода восстановления бэкапа">
+      <option name="closed" value="true" />
+      <created>1762192381692</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1762192381692</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -196,6 +196,7 @@
     <MESSAGE value="Все изменения направлены на:&#10;- исправление архитектурных недостатков (привязка пользователя kafedra к кафедре),&#10;- восстановление целостности резервных копий (PK и последовательности),&#10;- унификацию стиля диалоговых окон,&#10;- реализацию полноценного редактирования и удаления в таблицах расписания и учебных планов,&#10;- улучшение UX (размеры, отступы, кнопки)." />
     <MESSAGE value="Поработала над кнопками для администратора. Надо исправить только распаковку бэкапа (не загружаются оценки)" />
     <MESSAGE value="Добавлено окно инструкции пользователя для каждой роли" />
-    <option name="LAST_COMMIT_MESSAGE" value="Добавлено окно инструкции пользователя для каждой роли" />
+    <MESSAGE value="Обновление некоторых диалоговых окон, обновление шаблонов отчётов, обновление метода восстановления бэкапа" />
+    <option name="LAST_COMMIT_MESSAGE" value="Обновление некоторых диалоговых окон, обновление шаблонов отчётов, обновление метода восстановления бэкапа" />
   </component>
 </project>

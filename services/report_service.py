@@ -330,48 +330,109 @@ class ReportService:
 
     @staticmethod
     def generate_teacher_workload_report(teacher_id):
-        """Генерация отчета по нагрузке преподавателя"""
-        # Используем функцию из БД для общей нагрузки
-        workload_data = db.execute_query("SELECT get_teacher_workload(%s)", (teacher_id,))
+        """Генерация отчёта по нагрузке преподавателя с диаграммой"""
+        try:
+            print(f"🔍 Генерация отчёта по нагрузке для teacher_id: {teacher_id}")
 
-        # Детальная нагрузка
-        detail_query = """
-        SELECT d.name, g.name, sp.semester, sp.hours_lecture, sp.hours_practice,
-               (sp.hours_lecture + sp.hours_practice) as total_hours
-        FROM study_plans sp
-        JOIN disciplines d ON sp.discipline_id = d.id
-        JOIN groups g ON sp.group_id = g.id
-        WHERE sp.teacher_id = %s
-        ORDER BY g.name, sp.semester
-        """
-        detail_data = db.execute_query(detail_query, (teacher_id,))
+            # 1. Основные данные преподавателя
+            teacher_query = """
+            SELECT t.fio, t.position, d.name as department_name
+            FROM teachers t
+            JOIN departments d ON t.department_id = d.id
+            WHERE t.id = %s
+            """
+            teacher_result = db.execute_query(teacher_query, (teacher_id,))
+            if not teacher_result:
+                raise Exception("Преподаватель не найден")
+            teacher_fio, teacher_position, department_name = teacher_result[0]
 
-        # Информация о преподавателе
-        teacher_query = "SELECT fio, position FROM teachers WHERE id = %s"
-        teacher_data = db.execute_query(teacher_query, (teacher_id,))
+            # 2. Общая статистика
+            total_query = """
+            SELECT 
+                COALESCE(SUM(hours_lecture + hours_practice), 0),
+                COALESCE(SUM(hours_lecture), 0),
+                COALESCE(SUM(hours_practice), 0)
+            FROM study_plans
+            WHERE teacher_id = %s
+            """
+            total_result = db.execute_query(total_query, (teacher_id,))
+            total_hours, lecture_hours, practice_hours = total_result[0] if total_result else (0, 0, 0)
 
-        if not teacher_data:
+            # 3. Детализация
+            detail_query = """
+            SELECT d.name, g.name, sp.semester, sp.hours_lecture, sp.hours_practice,
+                   (sp.hours_lecture + sp.hours_practice) as total_hours
+            FROM study_plans sp
+            JOIN disciplines d ON sp.discipline_id = d.id
+            JOIN groups g ON sp.group_id = g.id
+            WHERE sp.teacher_id = %s
+            ORDER BY g.name, d.name
+            """
+            detail_result = db.execute_query(detail_query, (teacher_id,))
+            workload_details = []
+            disciplines = []
+            lecture_data = []
+            practice_data = []
+
+            for row in detail_result:
+                detail = {
+                    'discipline': row[0],
+                    'group': row[1],
+                    'semester': row[2],
+                    'lecture_hours': row[3],
+                    'practice_hours': row[4],
+                    'total_hours': row[5]
+                }
+                workload_details.append(detail)
+                disciplines.append(f"{row[0]}\n({row[1]})")
+                lecture_data.append(row[3])
+                practice_data.append(row[4])
+
+            # 4. Создаём столбчатую диаграмму
+            bar_chart = None
+            if disciplines:
+                import matplotlib.pyplot as plt
+                import io
+                from docx.shared import Mm
+                from docxtpl import InlineImage
+
+                plt.figure(figsize=(10, 6))
+                x = range(len(disciplines))
+                plt.bar(x, lecture_data, label='Лекции', color='#3498db')
+                plt.bar(x, practice_data, bottom=lecture_data, label='Практика', color='#2ecc71')
+                plt.xlabel('Дисциплины (Группы)')
+                plt.ylabel('Часы')
+                plt.title('Распределение учебной нагрузки', fontsize=14)
+                plt.xticks(x, disciplines, rotation=45, ha='right')
+                plt.legend()
+                plt.tight_layout()
+
+                img_buffer = io.BytesIO()
+                plt.savefig(img_buffer, format='png', bbox_inches='tight')
+                img_buffer.seek(0)
+                plt.close()
+                bar_chart = img_buffer  # Передаём буфер
+
+            # 5. Формируем контекст
+            context = {
+                'current_date': datetime.now().strftime('%d.%m.%Y'),
+                'teacher_fio': teacher_fio,
+                'teacher_position': teacher_position,
+                'department_name': department_name,
+                'total_hours': total_hours,
+                'lecture_hours': lecture_hours,
+                'practice_hours': practice_hours,
+                'workload_details': workload_details,
+                'bar_chart': bar_chart
+            }
+
+            return context
+
+        except Exception as e:
+            print(f"❌ Ошибка при генерации отчёта по нагрузке: {e}")
+            import traceback
+            traceback.print_exc()
             return None
-
-        context = {
-            'teacher_fio': teacher_data[0][0],
-            'teacher_position': teacher_data[0][1],
-            'total_hours': workload_data[0][0] if workload_data else 0,
-            'current_date': datetime.now().strftime('%d.%m.%Y'),
-            'workload_details': []
-        }
-
-        for detail in detail_data:
-            context['workload_details'].append({
-                'discipline': detail[0],
-                'group': detail[1],
-                'semester': detail[2],
-                'lecture_hours': detail[3],
-                'practice_hours': detail[4],
-                'total_hours': detail[5]
-            })
-
-        return context
 
     @staticmethod
     def generate_classroom_occupancy_report(building_filter=None):
@@ -611,7 +672,9 @@ class DocumentGenerator:
             template_path = os.path.join(templates_dir, template_name)
             doc = DocxTemplate(template_path)
 
-            # Если есть диаграмма — создаём InlineImage с привязкой к шаблону
+            # Создаём InlineImage для диаграмм (если есть)
+            if 'bar_chart' in context and context['bar_chart']:
+                context['bar_chart'] = InlineImage(doc, context['bar_chart'], width=Mm(160))
             if 'pie_chart' in context and context['pie_chart']:
                 context['pie_chart'] = InlineImage(doc, context['pie_chart'], width=Mm(100))
 
