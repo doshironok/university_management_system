@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(spacer)
 
-        guide_btn = QPushButton("📖 Инструкция")
+        guide_btn = QPushButton("📖 Справка")
         guide_btn.setObjectName("nav_button")
         guide_btn.clicked.connect(self.show_user_guide)
         layout.addWidget(guide_btn)
