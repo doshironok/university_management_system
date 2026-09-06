@@ -376,3 +376,133 @@ INSERT INTO users (login, password_hash, role, teacher_id, student_id, departmen
 ('i.vasilev', '$2b$10$W6Yda/1QQZy.mvL4.gZuw.2TFb2BFVOZWf2V/dlixidUyWunv0hTK', 'student', NULL, 3, 1),
 ('m.grigorieva', '$2b$10$mazrSrvdWEZJfCp/MkmKyuLIKPWtrxVDiTUg9OrgmGicLdkOr66ei', 'student', NULL, 4, 1),
 ('a.dmitriev', '$2b$10$hyqoGnTLARzADcchpG/1fOE8qXZ0LTzFtd2uYMIadE.g.U/cDhQYG', 'student', NULL, 5, 2);
+
+
+
+
+-- Студенты без учетных записей в users
+INSERT INTO students (fio, record_book_id, group_id, status) VALUES
+('Егорова Дарья Андреевна', 'ПИ2021005', 1, true),
+('Жуков Никита Романович', 'ПИ2021006', 1, true),
+('Захарова Виктория Олеговна', 'ПИ2022001', 2, true),
+('Ильин Максим Дмитриевич', 'ПИ2022002', 2, true),
+('Ковалёва Анастасия Игоревна', 'ИБ2021002', 3, true),
+('Лебедев Артём Павлович', 'ИБ2021003', 3, false);  -- отчислен
+-- id: 6, 7, 8, 9, 10, 11
+
+-- Преподаватели без учетных записей в users
+INSERT INTO teachers (fio, "position", academic_degree, department_id) VALUES
+('Петров Алексей Николаевич', 'Доцент', 'к.т.н.', 1),
+('Сидорова Елена Викторовна', 'Старший преподаватель', NULL, 1),
+('Козлов Андрей Михайлович', 'Ассистент', NULL, 2),
+('Новикова Ольга Сергеевна', 'Профессор', 'д.т.н.', 2),
+('Морозов Игорь Владимирович', 'Доцент', 'к.ф.-м.н.', 1);
+-- id: 4, 5, 6, 7, 8
+
+
+-- Семестр 3 (осень 2022)
+INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice) VALUES
+(1, 1, 1, 3, 36, 36),   -- БД для ПИ-21-1, Иванов
+(2, 1, 2, 3, 36, 54),   -- ПИИС для ПИ-21-1, Смирнова
+(4, 1, 4, 3, 18, 36);   -- Технологии программирования для ПИ-21-1, Петров
+
+-- Семестр 4 (весна 2023)
+INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice) VALUES
+(1, 1, 1, 4, 18, 36),   -- БД (продолжение) для ПИ-21-1
+(2, 1, 2, 4, 18, 36),   -- ПИИС (продолжение)
+(3, 3, 6, 4, 36, 36);   -- Криптография для ИБ-21-1, Козлов
+
+-- Семестр 5 (осень 2023) — для группы ПИ-21-2
+INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice) VALUES
+(1, 2, 5, 5, 36, 36),   -- БД для ПИ-21-2, Морозов
+(4, 2, 4, 5, 36, 54),   -- Технологии программирования для ПИ-21-2, Петров
+(2, 2, 2, 5, 18, 36);   -- ПИИС для ПИ-21-2, Смирнова
+
+-- Семестр 3 для ИБ-21-1
+INSERT INTO study_plans (discipline_id, group_id, teacher_id, semester, hours_lecture, hours_practice) VALUES
+(3, 3, 7, 3, 36, 36),   -- Криптография для ИБ-21-1, Новикова
+(1, 3, 8, 3, 36, 36);   -- БД для ИБ-21-1, Морозов
+-- id: 1..12
+
+
+-- Оценки для студента 1 (Алексеев, ПИ-21-1) — study_plan_id=1 (БД, семестр 3)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(1, 1, '5', '2022-12-20', 'экзамен'),
+(1, 1, '5', '2022-11-15', 'зачет');
+
+-- Оценки для студента 1 — study_plan_id=2 (ПИИС, семестр 3)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(1, 2, '4', '2022-12-22', 'экзамен'),
+(1, 2, 'отл', '2022-10-20', 'курсовая');
+
+-- Оценки для студента 2 (Белова, ПИ-21-1) — отличница
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(2, 1, '5', '2022-12-20', 'экзамен'),
+(2, 2, '5', '2022-12-22', 'экзамен'),
+(2, 3, '5', '2022-12-25', 'экзамен');
+
+-- Оценки для студента 3 (Васильев, ПИ-21-2) — study_plan_id=7 (БД, семестр 5)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(3, 7, '4', '2023-12-18', 'экзамен'),
+(3, 8, '3', '2023-12-20', 'экзамен');  -- тройка по технологиям программирования
+
+-- Оценки для студента 4 (Григорьева, ПИ-21-2)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(4, 7, '5', '2023-12-18', 'экзамен'),
+(4, 8, '4', '2023-12-20', 'экзамен');
+
+-- Оценки для студента 5 (Дмитриев, ИБ-21-1) — study_plan_id=10 (Криптография)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(5, 10, '5', '2022-12-19', 'экзамен'),
+(5, 11, '4', '2022-12-21', 'экзамен');
+
+-- Оценки для студента 6 (Егорова, ПИ-21-1)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(6, 1, '4', '2022-12-20', 'экзамен'),
+(6, 2, '5', '2022-12-22', 'экзамен');
+
+-- Оценки для студента 7 (Жуков, ПИ-21-1) — троечник
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(7, 1, '3', '2022-12-20', 'экзамен'),
+(7, 2, '3', '2022-12-22', 'экзамен');
+
+-- Оценки для студента 8 (Захарова, ПИ-21-2)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(8, 7, '5', '2023-12-18', 'экзамен'),
+(8, 9, '5', '2023-12-19', 'экзамен');
+
+-- Оценки для студента 9 (Ильин, ПИ-21-2)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(9, 7, '4', '2023-12-18', 'экзамен'),
+(9, 8, '4', '2023-12-20', 'экзамен');
+
+-- Оценки для студента 10 (Ковалёва, ИБ-21-1)
+INSERT INTO grades (student_id, study_plan_id, grade, exam_date, type) VALUES
+(10, 10, '5', '2022-12-19', 'экзамен'),
+(10, 11, '5', '2022-12-21', 'экзамен');
+
+
+-- Понедельник, группа ПИ-21-1 (id=1)
+INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type) VALUES
+(1, 1, 1, 1, '09:00', '10:30', 'каждую'),     -- БД, ауд.101, Иванов
+(2, 2, 2, 1, '10:45', '12:15', 'каждую');     -- ПИИС, ауд.205, Смирнова
+
+-- Вторник, группа ПИ-21-1
+INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type) VALUES
+(4, 4, 4, 1, '13:00', '14:30', 'четная'),     -- Технологии программирования, ауд.412, Петров
+(1, 3, 1, 1, '14:45', '16:15', 'нечетная');   -- БД (лаб.), ауд.310, Иванов
+
+-- Среда, группа ПИ-21-2 (id=2)
+INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type) VALUES
+(1, 1, 5, 2, '09:00', '10:30', 'каждую'),     -- БД, ауд.101, Морозов
+(4, 4, 4, 2, '10:45', '12:15', 'каждую');     -- Технологии программирования, ауд.412, Петров
+
+-- Четверг, группа ИБ-21-1 (id=3)
+INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type) VALUES
+(3, 3, 7, 3, '09:00', '10:30', 'четная'),     -- Криптография, ауд.310, Новикова
+(1, 2, 8, 3, '10:45', '12:15', 'нечетная');   -- БД, ауд.205, Морозов
+
+-- Пятница, общие занятия
+INSERT INTO schedule (discipline_id, classroom_id, teacher_id, group_id, start_time, end_time, week_type) VALUES
+(2, 2, 2, 1, '09:00', '10:30', 'четная'),     -- ПИИС для ПИ-21-1, ауд.205, Смирнова
+(2, 2, 2, 2, '10:45', '12:15', 'нечетная');   -- ПИИС для ПИ-21-2, ауд.205, Смирнова
