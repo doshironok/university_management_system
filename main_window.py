@@ -209,10 +209,10 @@ class MainWindow(QMainWindow):
 
         # Информация о системе
         system_label = QLabel(
-            "Учебная деятельность кафедры\n"
-            "Система управления учебным процессом\n\n"
+            "Академическая успеваемость\n"
+            "Система учета академической успеваемости\n\n"
             "Версия: 1.0\n"
-            "КубГТУ © 2025"
+            "КубГТУ © 2026"
         )
         system_label.setObjectName("system_info")
         system_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
